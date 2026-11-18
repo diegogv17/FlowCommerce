@@ -13,7 +13,7 @@
     "@ai-sdk/react": "^2.0.80",
     "@flowcommerce/types": "workspace:*",
     "@next/third-parties": "^16.0.1",
-    "@supabase/ssr": "^0.7.0",
+    "@supabase/ssr": "^0.12.7",
     "@supabase/supabase-js": "^2.76.1",
     "@tanstack/react-query": "^5.90.5",
     "ai": "^5.0.80",
