@@ -1,0 +1,9 @@
+# Finales de linea normalizados: LF en el repositorio (CI corre en Linux).
+* text=auto eol=lf
+# Los scripts de Windows necesitan CRLF.
+*.cmd text eol=crlf
+*.bat text eol=crlf
+# Binarios
+*.png binary
+*.jpg binary
+*.pdf binary
