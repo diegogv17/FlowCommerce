@@ -38,7 +38,7 @@ jobs:
         ambiente: [staging, mantenimiento]
     environment: ${{ matrix.ambiente }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -57,7 +57,7 @@ jobs:
     timeout-minutes: 30
     environment: mantenimiento
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: ./.github/actions/db-backup
         with:
           database-url: ${{ secrets.SUPABASE_DB_URL }}
