@@ -1,0 +1,58 @@
+# Revisión de migraciones en los PR: si una migración nueva borra, renombra
+# o cambia el tipo de columnas/tablas (cambios que pueden perder datos o
+# romper la versión de la API que sigue corriendo), el PR necesita la
+# etiqueta "migracion-destructiva" para que el equipo lo revise a propósito.
+name: Revisión de migraciones
+
+on:
+  pull_request:
+    branches: [develop, main]
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+    paths:
+      - 'src/db/migrations/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  revisar:
+    name: Migraciones destructivas
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Buscar operaciones destructivas en migraciones nuevas o cambiadas
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          TIENE_ETIQUETA: ${{ contains(github.event.pull_request.labels.*.name, 'migracion-destructiva') }}
+        run: |
+          set -euo pipefail
+          # Una migración ya aplicada no se edita: se crea otra.
+          editadas=$(git diff --name-only --diff-filter=M "$BASE_SHA" "$HEAD_SHA" -- 'src/db/migrations/*.sql' || true)
+          if [ -n "$editadas" ]; then
+            for f in $editadas; do echo "::error file=$f::No edites una migración existente (ya puede estar aplicada en staging/production). Crea una nueva."; done
+            exit 1
+          fi
+
+          nuevas=$(git diff --name-only --diff-filter=A "$BASE_SHA" "$HEAD_SHA" -- 'src/db/migrations/*.sql')
+          if [ -z "$nuevas" ]; then echo "Sin migraciones SQL nuevas."; exit 0; fi
+
+          patron='DROP[[:space:]]+(TABLE|COLUMN|SCHEMA|TYPE)|RENAME[[:space:]]+(COLUMN|TO)|ALTER[[:space:]]+COLUMN[^;]*[[:space:]]TYPE[[:space:]]|TRUNCATE|DELETE[[:space:]]+FROM'
+          hallazgos=0
+          for f in $nuevas; do
+            if grep -nEi "$patron" "$f"; then
+              echo "::warning file=$f::Operación destructiva en $f"
+              hallazgos=1
+            fi
+          done
+
+          if [ "$hallazgos" = 1 ] && [ "$TIENE_ETIQUETA" != "true" ]; then
+            echo "::error::Hay operaciones destructivas. Explica en el PR cómo se migran los datos y agrega la etiqueta 'migracion-destructiva'."
+            exit 1
+          fi
+          echo "Revisión de migraciones OK."
