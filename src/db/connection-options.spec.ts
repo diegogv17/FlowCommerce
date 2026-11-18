@@ -35,6 +35,22 @@ describe('connectionOptions (Supabase)', () => {
     expect(connectionOptions(direct, { DATABASE_POOL_MAX: '0' }).max).toBe(10);
   });
 
+  it('closes idle connections and recycles them for the pooler', () => {
+    const defaults = connectionOptions(direct, {});
+    expect(defaults.idle_timeout).toBe(20);
+    expect(defaults.max_lifetime).toBe(1800);
+    expect(defaults.connect_timeout).toBe(10);
+
+    const custom = connectionOptions(direct, {
+      DATABASE_IDLE_TIMEOUT_S: '5',
+      DATABASE_MAX_LIFETIME_S: '600',
+      DATABASE_CONNECT_TIMEOUT_S: 'nope',
+    });
+    expect(custom.idle_timeout).toBe(5);
+    expect(custom.max_lifetime).toBe(600);
+    expect(custom.connect_timeout).toBe(10);
+  });
+
   it('does not throw on a malformed url', () => {
     expect(usesTransactionPooler('not a url')).toBe(false);
   });
