@@ -1,0 +1,66 @@
+# Mantenimiento programado de Supabase (corre desde main):
+#  - "Latido" cada 3 días: los proyectos del plan gratis se PAUSAN tras
+#    7 días sin actividad. Una consulta de solo lectura lo evita.
+#  - Respaldo nocturno CIFRADO de production (el plan gratis no da respaldos
+#    descargables). Ver .github/actions/db-backup.
+# Usa el ambiente "mantenimiento" (sin aprobación manual, solo rama main),
+# para no bloquear los jobs programados con la aprobación de "production".
+name: Supabase · mantenimiento
+
+on:
+  schedule:
+    - cron: '23 8 * * *'     # 02:23 Guatemala: respaldo diario
+    - cron: '41 14 */3 * *'  # cada 3 días: latido
+  workflow_dispatch:
+    inputs:
+      tarea:
+        description: Qué ejecutar
+        type: choice
+        options: [latido, respaldo]
+        default: latido
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-mantenimiento
+  cancel-in-progress: false
+
+jobs:
+  latido:
+    name: Latido (${{ matrix.ambiente }})
+    if: github.event.schedule == '41 14 */3 * *' || github.event.inputs.tarea == 'latido'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        ambiente: [staging, mantenimiento]
+    environment: ${{ matrix.ambiente }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - name: Consulta de solo lectura
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/db/status.mjs
+
+  respaldo:
+    name: Respaldo diario de production
+    if: github.event.schedule == '23 8 * * *' || github.event.inputs.tarea == 'respaldo'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: mantenimiento
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/db-backup
+        with:
+          database-url: ${{ secrets.SUPABASE_DB_URL }}
+          passphrase: ${{ secrets.BACKUP_PASSPHRASE }}
+          name: respaldo-diario-${{ github.run_id }}
+          retention-days: '7'
