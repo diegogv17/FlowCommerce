@@ -1,0 +1,149 @@
+# Integración continua: cada PR y cada push a develop/main debe pasar por
+# aquí antes de poder fusionarse (configurar como check obligatorio en la
+# protección de ramas). No usa secretos ni toca Supabase.
+name: CI
+
+on:
+  pull_request:
+    branches: [develop, main]
+  push:
+    branches: [develop, main]
+  workflow_dispatch:
+
+# Un solo run por rama/PR: si llega un commit nuevo se cancela el anterior.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+# Mínimo privilegio: el workflow solo lee el código.
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '24'
+  # Next.js no envía telemetría desde CI.
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  api:
+    name: API · lint, tipos y pruebas unitarias
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      # --frozen-lockfile: si alguien cambió package.json sin actualizar
+      # pnpm-lock.yaml, el build falla en lugar de instalar otra cosa.
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Sin --fix: en CI el lint solo verifica, nunca reescribe.
+      - name: Lint
+        run: pnpm exec eslint "{src,test}/**/*.ts" --max-warnings=0
+
+      - name: Tipos (src + test)
+        run: pnpm exec tsc --noEmit -p tsconfig.json
+
+      - name: Pruebas unitarias con cobertura
+        run: pnpm exec jest --coverage --ci --runInBand
+
+      - name: Build de la API
+        run: pnpm run build
+
+      - name: Subir cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cobertura-api
+          path: coverage/
+          retention-days: 7
+          if-no-files-found: ignore
+
+  api-e2e:
+    name: API · migraciones y pruebas e2e (Postgres 17)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    # Base efímera solo para este job: nunca se prueba contra Supabase.
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: flowcommerce
+          POSTGRES_PASSWORD: flowcommerce
+          POSTGRES_DB: flowcommerce_dev
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U flowcommerce -d flowcommerce_dev"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://flowcommerce:flowcommerce@localhost:5432/flowcommerce_dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Aplica TODAS las migraciones desde cero: si una no corre en una base
+      # limpia, tampoco correrá en Supabase.
+      - name: Aplicar migraciones
+        run: pnpm run db:migrate
+
+      # El esquema (schema.ts) y las migraciones deben coincidir. Si alguien
+      # cambió schema.ts sin generar la migración, aquí aparecen archivos nuevos.
+      - name: Verificar que no falten migraciones
+        run: |
+          pnpm run db:generate
+          if [ -n "$(git status --porcelain src/db/migrations)" ]; then
+            echo "::error::schema.ts cambió sin su migración. Corre 'pnpm db:generate' y súbela."
+            git status --porcelain src/db/migrations
+            exit 1
+          fi
+
+      - name: Pruebas e2e
+        run: pnpm exec jest --config ./test/jest-e2e.json --ci --runInBand
+
+  web:
+    name: Web · tipos, pruebas y build (Next.js)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      # Valores de ejemplo: el build no se conecta a nada, solo los incrusta.
+      NEXT_PUBLIC_API_URL: https://api.example.com/api/v1
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+      NEXT_PUBLIC_SITE_URL: https://flowcommerce.example.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Cache del build incremental de Next.js entre runs.
+      - uses: actions/cache@v4
+        with:
+          path: web/.next/cache
+          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx') }}
+          restore-keys: |
+            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
+      - name: Tipos
+        run: pnpm --filter @flowcommerce/web typecheck
+      - name: Pruebas (Vitest)
+        run: pnpm --filter @flowcommerce/web test
+      - name: Build
+        run: pnpm --filter @flowcommerce/web build
