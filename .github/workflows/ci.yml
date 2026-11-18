@@ -52,7 +52,7 @@ jobs:
         run: pnpm exec tsc --noEmit -p tsconfig.json
 
       - name: Pruebas unitarias con cobertura
-        run: pnpm run test:cov -- --ci --runInBand
+        run: pnpm exec jest --coverage --ci --runInBand
 
       - name: Build de la API
         run: pnpm run build
@@ -111,7 +111,7 @@ jobs:
           fi
 
       - name: Pruebas e2e
-        run: pnpm run test:e2e -- --ci --runInBand
+        run: pnpm exec jest --config ./test/jest-e2e.json --ci --runInBand
 
   web:
     name: Web · tipos, pruebas y build (Next.js)
