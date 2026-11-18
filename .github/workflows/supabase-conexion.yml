@@ -1,0 +1,38 @@
+# Prueba la conexión con Supabase de un ambiente y muestra su estado
+# (migraciones aplicadas/pendientes y RLS). No modifica nada.
+# Se ejecuta a mano: Actions → "Supabase · probar conexión" → Run workflow.
+name: Supabase · probar conexión
+
+on:
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente de GitHub cuyo secreto SUPABASE_DB_URL se usa
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+
+jobs:
+  conexion:
+    name: Conexión a ${{ inputs.ambiente }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # El secreto vive en el ambiente (Settings → Environments), no en el repo:
+    # staging y production tienen cada uno su propia cadena.
+    environment: ${{ inputs.ambiente }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+      - name: Estado de la base
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/db/status.mjs
