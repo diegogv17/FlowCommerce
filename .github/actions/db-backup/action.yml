@@ -1,0 +1,79 @@
+# Respaldo lógico (pg_dump) CIFRADO de la base de un ambiente.
+# El repositorio es público: un respaldo sin cifrar en los artifacts expondría
+# los datos de los clientes. Por eso solo se sube cifrado con GPG (AES-256)
+# usando el secreto BACKUP_PASSPHRASE; si no existe, el paso se omite.
+#
+# Restaurar (en local):
+#   gpg --decrypt respaldo.dump.gpg > respaldo.dump
+#   pg_restore --no-owner --no-privileges -d "<cadena>" respaldo.dump
+name: Respaldo cifrado de la base
+description: pg_dump de los esquemas public y drizzle, cifrado y subido como artifact.
+
+inputs:
+  database-url:
+    description: Cadena Session pooler (secreto SUPABASE_DB_URL)
+    required: true
+  passphrase:
+    description: Clave para cifrar (secreto BACKUP_PASSPHRASE)
+    required: false
+    default: ''
+  name:
+    description: Nombre del artifact
+    required: true
+  retention-days:
+    description: Días que GitHub guarda el artifact
+    required: false
+    default: '7'
+
+runs:
+  using: composite
+  steps:
+    - name: Comprobar clave de cifrado
+      id: check
+      shell: bash
+      env:
+        PASSPHRASE: ${{ inputs.passphrase }}
+      run: |
+        if [ -z "$PASSPHRASE" ]; then
+          echo "::warning::Sin BACKUP_PASSPHRASE: no se hace respaldo (el repo es público y no se suben datos sin cifrar)."
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    # pg_dump debe ser de la misma versión mayor o más nueva que el servidor
+    # (Supabase usa Postgres 15 o 17): se instala el cliente 17 de PGDG.
+    - name: Instalar cliente de Postgres 17
+      if: steps.check.outputs.skip == 'false'
+      shell: bash
+      run: |
+        sudo install -d /usr/share/postgresql-common/pgdg
+        sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+        echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list > /dev/null
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq postgresql-client-17
+
+    - name: pg_dump cifrado
+      if: steps.check.outputs.skip == 'false'
+      shell: bash
+      env:
+        DATABASE_URL: ${{ inputs.database-url }}
+        PASSPHRASE: ${{ inputs.passphrase }}
+      run: |
+        set -euo pipefail
+        mkdir -p respaldo
+        /usr/lib/postgresql/17/bin/pg_dump "$DATABASE_URL" \
+          --format=custom --no-owner --no-privileges \
+          --schema=public --schema=drizzle \
+          | gpg --symmetric --cipher-algo AES256 --batch --pinentry-mode loopback \
+              --passphrase "$PASSPHRASE" -o "respaldo/${{ inputs.name }}.dump.gpg"
+        ls -lh respaldo
+
+    - name: Subir respaldo
+      if: steps.check.outputs.skip == 'false'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ inputs.name }}
+        path: respaldo/
+        retention-days: ${{ inputs.retention-days }}
+        if-no-files-found: error

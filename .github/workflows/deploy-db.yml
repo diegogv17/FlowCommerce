@@ -1,0 +1,85 @@
+# Despliegue continuo de la BASE DE DATOS a Supabase.
+#   develop → staging     (automático al fusionar)
+#   main    → production  (espera aprobación del ambiente "production")
+# Solo corre si cambian las migraciones o este workflow. Las migraciones las
+# genera drizzle-kit y se versionan en src/db/migrations; nunca se tocan las
+# tablas a mano en el dashboard.
+name: CD · migraciones a Supabase
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'src/db/migrations/**'
+      - '.github/workflows/deploy-db.yml'
+  workflow_dispatch:
+    inputs:
+      ambiente:
+        description: Ambiente a migrar
+        type: choice
+        options: [staging, production]
+        default: staging
+
+permissions:
+  contents: read
+
+jobs:
+  migrar:
+    name: Migrar ${{ github.event.inputs.ambiente || (github.ref_name == 'main' && 'production' || 'staging') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: ${{ github.event.inputs.ambiente || (github.ref_name == 'main' && 'production' || 'staging') }}
+    # Nunca dos migraciones a la vez sobre el mismo ambiente, y nunca se
+    # cancela una a medias (cancel-in-progress: false).
+    concurrency:
+      group: db-migrate-${{ github.event.inputs.ambiente || (github.ref_name == 'main' && 'production' || 'staging') }}
+      cancel-in-progress: false
+    env:
+      AMBIENTE: ${{ github.event.inputs.ambiente || (github.ref_name == 'main' && 'production' || 'staging') }}
+    # El secreto se pasa SOLO a los pasos que lo usan (no a pnpm install,
+    # cuyos scripts de postinstall podrían leerlo).
+    steps:
+      - uses: actions/checkout@v4
+
+      # Production solo se migra desde main, aunque alguien lo lance a mano.
+      - name: Proteger production
+        if: env.AMBIENTE == 'production' && github.ref_name != 'main'
+        run: |
+          echo "::error::production solo se migra desde main (rama actual: ${{ github.ref_name }})."
+          exit 1
+
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      - name: Estado antes de migrar
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/db/status.mjs
+
+      # Red de seguridad antes de tocar production (cifrado; ver la acción).
+      - name: Respaldo previo
+        if: env.AMBIENTE == 'production'
+        uses: ./.github/actions/db-backup
+        with:
+          database-url: ${{ secrets.SUPABASE_DB_URL }}
+          passphrase: ${{ secrets.BACKUP_PASSPHRASE }}
+          name: respaldo-pre-migracion-${{ github.run_id }}
+          retention-days: '14'
+
+      # drizzle-kit usa DIRECT_URL (ver drizzle.config.ts). Cada migración
+      # se registra en drizzle.__drizzle_migrations, así que volver a correr
+      # el workflow no repite nada.
+      - name: Aplicar migraciones
+        env:
+          DIRECT_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: pnpm run db:migrate
+
+      - name: Verificar que no quedaron pendientes
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: node scripts/db/status.mjs --fail-if-pending
