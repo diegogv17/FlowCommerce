@@ -29,7 +29,8 @@ const MAX_RISKS = 4;
 export interface LeadInsight {
   summary: string;
   nextBestAction: string;
-  closeProbability: number;
+  // null = el modelo no tuvo datos suficientes para estimarla (no se adivina).
+  closeProbability: number | null;
   risks: string[];
   suggestedFollowUpDays: number;
   generatedAt: string;
@@ -91,7 +92,10 @@ export class GetLeadInsightUseCase {
       nextBestAction:
         String(output.nextBestAction ?? '').trim() ||
         'Revisa la conversación y agenda un seguimiento.',
-      closeProbability: clampInt(output.closeProbability, 0, 100),
+      closeProbability:
+        output.closeProbability === null
+          ? null
+          : clampInt(output.closeProbability, 0, 100),
       risks: (Array.isArray(output.risks) ? output.risks : [])
         .filter((risk): risk is string => typeof risk === 'string')
         .map((risk) => risk.trim())
