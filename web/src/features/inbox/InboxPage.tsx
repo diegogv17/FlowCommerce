@@ -362,7 +362,7 @@ function Thread({ conversation }: { conversation: Conversation }) {
 
       <div className="border-t border-navy-100/70 p-4">
         {closed && (
-          <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 px3 p-3 text-xs text-amber-800">
+          <div className="mb-3 flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-800">
             <Clock className="mt-0.5 size-4 shrink-0" />
             <p>
               {conversation.windowOpenUntil
@@ -423,18 +423,10 @@ function Thread({ conversation }: { conversation: Conversation }) {
           </div>
         )}
 
-        {closed ? (
-          canSuggest && (
-            <div className="flex justify-end">
-              <Button variant="secondary" size="sm" onClick={generate} loading={suggest.isPending} icon={<Sparkles className="size-3.5 text-teal-600" />}>Sugerir respuesta</Button>
-            </div>
-          )
-        ) : (
-          !showTemplates && (
-            <button className="mt-2 flex items-center gap-1.5 text-xs font-medium text-navy-400 hover:text-navy-700" onClick={() => setShowTemplates(true)}>
-              <FileText className="size-3.5" /> Usar una plantilla de WhatsApp
-            </button>
-          )
+        {!closed && !showTemplates && (
+          <button className="mt-2 flex items-center gap-1.5 text-xs font-medium text-navy-400 hover:text-navy-700" onClick={() => setShowTemplates(true)}>
+            <FileText className="size-3.5" /> Usar una plantilla de WhatsApp
+          </button>
         )}
         {window24 === 'desconocida' && (
           <p className="mt-2 flex items-center gap-1.5 text-[11px] text-navy-300"><AlertTriangle className="size-3" /> Si el cliente no escribió en las últimas 24 h, WhatsApp solo aceptará una plantilla.</p>
@@ -445,9 +437,9 @@ function Thread({ conversation }: { conversation: Conversation }) {
 }
 
 /** Conversación de un lead que no aparece en la bandeja (filtrada o sin mensajes aún). */
-function useFallbackConversation(id: string | undefined, list: Conversation[] | undefined, enabled: boolean): Conversation | undefined {
-  const { data: lead } = useLead(enabled ? id : undefined)
-  return useMemo(() => {
+function useFallbackConversation(id: string | undefined, list: Conversation[] | undefined, enabled: boolean) {
+  const { data: lead, isError } = useLead(enabled ? id : undefined)
+  const conversation = useMemo<Conversation | undefined>(() => {
     if (!enabled || !lead || !id || list?.some((c) => c.id === id)) return undefined
     return {
       id: lead.id,
@@ -464,6 +456,7 @@ function useFallbackConversation(id: string | undefined, list: Conversation[] | 
       windowOpenUntil: undefined,
     }
   }, [enabled, lead, id, list])
+  return { conversation, loading: enabled && !lead && !isError }
 }
 
 export function InboxPage() {
@@ -474,7 +467,7 @@ export function InboxPage() {
   const { data, isLoading, isError, refetch } = useConversations({ search, unread: onlyUnread || undefined })
   const listed = data?.find((c) => c.id === id)
   const fallback = useFallbackConversation(id, data, !!id && !!data && !listed)
-  const active = listed ?? fallback
+  const active = listed ?? fallback.conversation
 
   useEffect(() => {
     if (!id && data && data.length > 0 && window.matchMedia('(min-width: 1024px)').matches) navigate(`/conversaciones/${data[0].id}`, { replace: true })
@@ -504,7 +497,7 @@ export function InboxPage() {
       <div className={cn('min-w-0 flex-1', !id && 'hidden lg:block')}>
         {active ? (
           <Thread conversation={active} />
-        ) : id && (isLoading || (!!data && !listed)) ? (
+        ) : id && (isLoading || fallback.loading) ? (
           <div className="grid h-full place-items-center"><Spinner /></div>
         ) : (
           <div className="grid h-full place-items-center">
