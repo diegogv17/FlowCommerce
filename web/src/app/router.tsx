@@ -5,6 +5,14 @@ import { LoginPage } from '@/features/auth/LoginPage'
 /** Cada pantalla se carga bajo demanda para mantener liviano el bundle inicial. */
 export const router = createBrowserRouter([
   { path: '/login', element: <LoginPage /> },
+  /* Pantallas de cuenta (públicas). */
+  { path: '/registro', lazy: async () => ({ Component: (await import('@/features/auth/RegisterPage')).RegisterPage }) },
+  { path: '/olvide-contrasena', lazy: async () => ({ Component: (await import('@/features/auth/ForgotPasswordPage')).ForgotPasswordPage }) },
+  { path: '/restablecer-contrasena', lazy: async () => ({ Component: (await import('@/features/auth/ResetPasswordPage')).ResetPasswordPage }) },
+  { path: '/onboarding', lazy: async () => ({ Component: (await import('@/features/auth/OnboardingPage')).OnboardingPage }) },
+  { path: '/invitacion', lazy: async () => ({ Component: (await import('@/features/auth/InvitationPage')).InvitationPage }) },
+  { path: '/solicitar-acceso', lazy: async () => ({ Component: (await import('@/features/auth/AccessRequestPage')).AccessRequestPage }) },
+  { path: '/auth/callback', lazy: async () => ({ Component: (await import('@/features/auth/AuthCallbackPage')).AuthCallbackPage }) },
   {
     path: '/',
     element: <AppLayout />,

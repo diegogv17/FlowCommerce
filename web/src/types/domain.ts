@@ -119,9 +119,16 @@ export interface Conversation {
   lastMessageAt: string
   unread: number
   aiEnabled: boolean
+  /** Teléfono y etapa del lead (vienen en la bandeja de la API) */
+  phone?: string
+  status?: LeadStatus
+  /** Hasta cuándo se puede enviar texto libre por WhatsApp (24 h tras el último mensaje del cliente). null = nunca escribió. */
+  windowOpenUntil?: string | null
 }
 
 export type MessageAuthor = 'lead' | 'agent' | 'ai'
+
+export type MessageDelivery = 'enviando' | 'enviado' | 'entregado' | 'leido' | 'fallido'
 
 export interface Message {
   id: ID
@@ -130,13 +137,44 @@ export interface Message {
   authorName: string
   text: string
   createdAt: string
+  /** Solo mensajes enviados: estado que reporta WhatsApp */
+  delivery?: MessageDelivery
+  /** Motivo de WhatsApp cuando delivery = fallido */
+  errorMessage?: string | null
+  /** Archivo adjunto (imagen, documento…) descargable */
+  attachmentId?: string | null
+  /** Nombre de la plantilla cuando el mensaje es una plantilla de WhatsApp */
+  templateName?: string | null
+}
+
+/** Plantilla de WhatsApp aprobada (para escribir con la ventana de 24 h cerrada). */
+export interface WhatsAppTemplate {
+  name: string
+  language: string
+  category: string
+  bodyText: string | null
+  bodyParameterCount: number
+  /** true = el encabezado necesita datos: no se puede enviar desde el CRM */
+  headerNeedsParameters: boolean
 }
 
 export interface AiSuggestion {
   id: ID
   text: string
   intent: string
-  confidence: number
+  /** 0..1; la API actual no la devuelve */
+  confidence?: number
+}
+
+/** Insight de IA de un lead (GET /assistant/leads/:leadId/insight). */
+export interface LeadInsight {
+  summary: string
+  nextBestAction: string
+  /** 0..100 */
+  closeProbability: number
+  risks: string[]
+  suggestedFollowUpDays: number
+  generatedAt: string
 }
 
 export interface AiSettings {
@@ -364,25 +402,32 @@ export interface DashboardSummary {
   monthlyConversion: Array<{ label: string; value: number }>
   quotesByStatus: Array<{ status: QuoteStatus; count: number }>
   periodLabel: string
-  salesByPeriod: Array<{ label: string; sales: number; goal: number }>
+  /** `goal` solo si la API llega a tener metas de venta (hoy no existe). */
+  salesByPeriod: Array<{ label: string; sales: number; goal?: number }>
   salesTotal: number
   todayFollowUps: Array<{
     id: ID
     leadId: ID
     leadName: string
     company: string
+    /** Título del seguimiento */
+    title?: string
     time: string
-    type: 'llamada' | 'reunion' | 'whatsapp' | 'correo'
+    type: 'llamada' | 'reunion' | 'whatsapp' | 'correo' | 'tarea'
     ownerName: string
     status: 'pendiente' | 'confirmado' | 'realizado'
   }>
   recentActivity: Array<{ id: ID; title: string; detail: string; at: string; tone: 'blue' | 'green' | 'amber' | 'red' | 'violet' }>
+  /** false = esa sección no se pudo cargar (sin permiso o error): la pantalla la oculta. */
+  sections?: { followUps: boolean; activity: boolean }
 }
 
 export interface Kpi {
   value: number
-  /** variación respecto al periodo anterior (puntos porcentuales o %) */
-  delta: number
+  /** variación respecto al periodo anterior (puntos porcentuales o %); null = la API no la calcula */
+  delta: number | null
+  /** Texto corto bajo el valor cuando no hay variación */
+  hint?: string
 }
 
 /* ───────────── Actividad y notificaciones ───────────── */
