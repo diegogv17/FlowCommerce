@@ -81,4 +81,75 @@ describe('parseChatMessages', () => {
       }),
     ).toThrow(BadRequestException);
   });
+
+  describe('aprobación de herramientas (needsApproval)', () => {
+    const toolPart = (state: string, approved?: boolean) => ({
+      type: 'tool-crear_seguimiento',
+      toolCallId: 'call-1',
+      state,
+      input: { leadId: 'x', tipo: 'CALL', titulo: 'Llamar' },
+      ...(approved === undefined
+        ? {}
+        : { approval: { id: 'ap-1', approved, signature: 'firma' } }),
+    });
+
+    it('acepta que la conversación termine con la respuesta a una aprobación', () => {
+      // Preparar
+      const body = {
+        messages: [
+          user('1', 'Agenda una llamada con Ana mañana'),
+          {
+            id: '2',
+            role: 'assistant',
+            parts: [toolPart('approval-responded', true)],
+          },
+        ],
+      };
+
+      // Actuar
+      const messages = parseChatMessages(body);
+
+      // Comprobar
+      expect(messages).toHaveLength(2);
+      expect(messages[1].parts).toEqual([toolPart('approval-responded', true)]);
+    });
+
+    it('descarta la solicitud de aprobación que el usuario no respondió', () => {
+      // Preparar: la llamada quedó en "approval-requested" (sin respuesta).
+      const body = {
+        messages: [
+          user('1', 'Agenda una llamada'),
+          {
+            id: '2',
+            role: 'assistant',
+            parts: [toolPart('approval-requested')],
+          },
+          user('3', 'Mejor no, olvídalo'),
+        ],
+      };
+
+      // Actuar
+      const messages = parseChatMessages(body);
+
+      // Comprobar: el mensaje del asistente queda sin partes y se elimina.
+      expect(messages.map((message) => message.id)).toEqual(['1', '3']);
+    });
+
+    it('rechaza terminar en una herramienta ya denegada (no hay nada que procesar)', () => {
+      // Preparar
+      const body = {
+        messages: [
+          user('1', 'Agenda una llamada'),
+          {
+            id: '2',
+            role: 'assistant',
+            parts: [toolPart('output-denied', false)],
+          },
+        ],
+      };
+
+      // Actuar y comprobar
+      expect(() => parseChatMessages(body)).toThrow(BadRequestException);
+    });
+  });
 });
