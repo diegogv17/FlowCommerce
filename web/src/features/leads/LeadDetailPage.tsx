@@ -62,7 +62,7 @@ export function LeadDetailPage() {
   const notes = useNotes({ leadId: id })
   const activity = useLeadActivity(id)
   const conversations = useConversations({ leadId: id })
-  const quotes = useQuotes({ search: lead?.company, pageSize: 20 })
+  const quotes = useQuotes({ leadId: id, pageSize: 20 })
 
   if (isError) return <Card><ErrorState onRetry={() => refetch()} /></Card>
   if (isLoading || !lead) return <PageLoader />
@@ -109,7 +109,7 @@ export function LeadDetailPage() {
             <Button variant="secondary" size="sm" icon={<Pencil className="size-3.5" />} onClick={() => setEditing(true)}>Editar</Button>
             <Button variant="secondary" size="sm" icon={<MessageSquare className="size-3.5" />} onClick={() => navigate(conversations.data?.[0] ? `/conversaciones/${conversations.data[0].id}` : '/conversaciones')}>Enviar mensaje</Button>
             <Button variant="secondary" size="sm" icon={<NotebookPen className="size-3.5" />} onClick={() => navigate(`/notas?nueva=1&lead=${lead.id}`)}>Registrar seguimiento</Button>
-            <Button size="sm" icon={<FilePlus2 className="size-3.5" />} onClick={() => navigate('/cotizaciones/nueva')}>Nueva Cotización</Button>
+            <Button size="sm" icon={<FilePlus2 className="size-3.5" />} onClick={() => navigate(`/cotizaciones/nueva?lead=${id}`)}>Nueva Cotización</Button>
             {canDelete && <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} loading={removeLead.isPending} onClick={onDelete}>Eliminar</Button>}
           </div>
         </div>
@@ -180,7 +180,7 @@ export function LeadDetailPage() {
 
       {tab === 'Cotizaciones' && (
         <Card className="pb-2">
-          {!quotes.data?.data.length ? <EmptyState title="Sin cotizaciones" text="Crea una cotización para este lead." action={<Button size="sm" onClick={() => navigate('/cotizaciones/nueva')}>Nueva Cotización</Button>} /> : (
+          {!quotes.data?.data.length ? <EmptyState title="Sin cotizaciones" text="Crea una cotización para este lead." action={<Button size="sm" onClick={() => navigate(`/cotizaciones/nueva?lead=${id}`)}>Nueva Cotización</Button>} /> : (
             <ul className="divide-y divide-navy-100/60 px-2">
               {quotes.data.data.map((q) => (
                 <li key={q.id}><Link to={`/cotizaciones/${q.id}`} className="flex items-center gap-4 rounded-xl px-3 py-3.5 hover:bg-navy-50/60"><span className="num w-20 text-[13px] font-medium text-flow-600">{q.folio}</span><span className="num flex-1 text-xs text-navy-400">{formatDate(q.issuedAt)}</span><Badge tone={quoteStatusMeta[q.status].tone} dot>{quoteStatusMeta[q.status].label}</Badge><span className="num w-32 text-right text-[13px] font-medium">{moneyExact(q.total)}</span></Link></li>
