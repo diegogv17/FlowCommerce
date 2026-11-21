@@ -417,6 +417,6 @@ Módulo `src/assistant/` (capas domain/application/infrastructure/presentation) 
 | GET | `leads/:leadId/insight` | `LEAD_READ` | `{ summary, nextBestAction, closeProbability (0-100), risks[], suggestedFollowUpDays, generatedAt }`. |
 
 - **Puerto `AI_MODEL_PROVIDER`** (`application/ports/ai-model.provider.ts`) con el adaptador `GeminiAiModelProvider`; los tests lo sustituyen por un mock.
-- **Variables:** `GEMINI_API_KEY` (sin ella las rutas responden **503** «La IA no está configurada…»), `GEMINI_MODEL` (por defecto `gemini-2.5-flash`), `THROTTLE_AI_LIMIT` / `THROTTLE_AI_TTL_MS` (por defecto 20 peticiones por minuto, **por usuario** y por ruta; 429 al superarlo).
+- **Variables:** `GEMINI_API_KEY` (sin ella las rutas responden **503** «La IA no está configurada…»), `GEMINI_MODEL` (por defecto `gemini-3.8-flash`), `THROTTLE_AI_LIMIT` / `THROTTLE_AI_TTL_MS` (por defecto 20 peticiones por minuto, **por usuario** y por ruta; 429 al superarlo).
 - **Privacidad:** al modelo no se le envían correos, teléfonos ni NIT de leads o clientes; los textos de clientes se tratan como datos, no como instrucciones.
 - **Frontend:** página `/asistente` (chat con `useChat`), tarjeta «Insight de IA» en el lead, «✦ Sugerir respuesta» en Conversaciones y el diálogo «Generar con IA» en Cotizaciones (`web/features/ai/`).

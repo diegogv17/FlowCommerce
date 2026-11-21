@@ -26,7 +26,9 @@ import type {
   StreamChatInput,
 } from '../application/ports/ai-model.provider';
 
-export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
+// gemini-2.5-flash ya no está disponible para claves nuevas de Google AI
+// Studio (responde error en cada llamada); GEMINI_MODEL lo puede sobrescribir.
+export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
 // Adaptador de Google Gemini con el Vercel AI SDK (v6). La clave se lee una vez
 // al arrancar: sin GEMINI_API_KEY el adaptador queda "no configurado" y los
