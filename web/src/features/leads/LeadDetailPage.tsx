@@ -1,12 +1,15 @@
 import { useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
-import { ArrowLeft, Check, FilePlus2, MessageSquare, NotebookPen, Pencil } from 'lucide-react'
+import { ArrowLeft, Check, FilePlus2, MessageSquare, NotebookPen, Pencil, Trash2 } from 'lucide-react'
 import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorState, PageLoader } from '@/components/ui'
 import { toneDot } from '@/components/ui/Badge'
-import { useConversations, useLead, useLeadActivity, useNotes, useQuotes, useUpdateLeadStatus } from '@/hooks/queries'
+import { useAuth } from '@/app/auth'
+import { useToast } from '@/app/toast'
+import { useConversations, useDeleteLead, useLead, useLeadActivity, useNotes, useQuotes, useUpdateLeadStatus } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { formatDate, formatFollowUp, moneyExact, relativeTime } from '@/lib/format'
-import { leadStatusMeta, quoteStatusMeta, sourceLabel } from '@/lib/labels'
+import { leadStatusMeta, quoteStatusMeta } from '@/lib/labels'
+import { leadSourceLabel } from '@/services/mappers/leads'
 import type { Lead, LeadStatus } from '@/types/domain'
 import { NewLeadModal } from './NewLeadModal'
 
@@ -16,6 +19,7 @@ type Tab = (typeof tabs)[number]
 
 function Stepper({ lead }: { lead: Lead }) {
   const update = useUpdateLeadStatus()
+  const toast = useToast()
   const current = stages.indexOf(lead.status)
   return (
     <Card className="pb-6">
@@ -28,7 +32,7 @@ function Stepper({ lead }: { lead: Lead }) {
             <li key={s} className="flex flex-1 flex-col items-center last:flex-none">
               <div className="flex w-full items-center">
                 <button
-                  onClick={() => update.mutate({ id: lead.id, status: s })}
+                  onClick={() => s !== lead.status && update.mutate({ id: lead.id, status: s }, { onError: (err) => toast.error(err.message) })}
                   aria-label={`Mover a ${leadStatusMeta[s].label}`}
                   className={cn('grid size-8 shrink-0 place-items-center rounded-full border-2 text-xs font-semibold transition-colors', done && 'border-teal-500 bg-teal-500 text-white', active && 'border-flow-500 bg-white text-flow-600 ring-4 ring-flow-500/15', !done && !active && 'border-navy-200 bg-white text-navy-300 hover:border-flow-300')}
                 >
@@ -50,6 +54,10 @@ export function LeadDetailPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('Resumen')
   const [editing, setEditing] = useState(false)
+  const { user } = useAuth()
+  const toast = useToast()
+  const removeLead = useDeleteLead()
+  const canDelete = user?.apiRole === 'OWNER' || user?.apiRole === 'ADMIN'
   const { data: lead, isLoading, isError, refetch } = useLead(id)
   const notes = useNotes({ leadId: id })
   const activity = useLeadActivity(id)
@@ -61,15 +69,23 @@ export function LeadDetailPage() {
 
   const meta = leadStatusMeta[lead.status]
   const info: Array<[string, string, boolean?]> = [
-    ['Empresa', lead.company],
-    ['Correo', lead.email],
-    ['Teléfono', lead.phone, true],
-    ['Fuente', sourceLabel[lead.source]],
+    ['Empresa', lead.company || '—'],
+    ['Correo', lead.email || '—'],
+    ['Teléfono', lead.phone || '—', true],
+    ['Fuente', leadSourceLabel(lead.source)],
     ['Responsable', lead.ownerName],
     ['Creado', formatDate(lead.createdAt), true],
     ['Último contacto', relativeTime(lead.lastContactAt)],
     ['Próximo seguimiento', formatFollowUp(lead.nextFollowUpAt), true],
   ]
+
+  const onDelete = () => {
+    if (!window.confirm(`¿Eliminar a ${lead.name}? Se borrarán también sus cotizaciones y mensajes. Esta acción no se puede deshacer.`)) return
+    removeLead.mutate(lead.id, {
+      onSuccess: () => { toast.success('Lead eliminado'); navigate('/leads') },
+      onError: (err) => toast.error(err.message),
+    })
+  }
 
   return (
     <>
@@ -83,7 +99,7 @@ export function LeadDetailPage() {
               <h1 className="font-display text-[24px] font-semibold">{lead.name}</h1>
               <Badge tone={meta.tone}>{meta.label}</Badge>
             </div>
-            <p className="mt-0.5 text-sm text-navy-400">{lead.company} · Responsable: {lead.ownerName}</p>
+            <p className="mt-0.5 text-sm text-navy-400">{lead.company ? `${lead.company} · ` : ''}Responsable: {lead.ownerName}</p>
           </div>
           <div className="pr-2 text-right">
             <p className="text-[10px] font-semibold tracking-[0.12em] text-navy-300 uppercase">Valor estimado</p>
@@ -94,6 +110,7 @@ export function LeadDetailPage() {
             <Button variant="secondary" size="sm" icon={<MessageSquare className="size-3.5" />} onClick={() => navigate(conversations.data?.[0] ? `/conversaciones/${conversations.data[0].id}` : '/conversaciones')}>Enviar mensaje</Button>
             <Button variant="secondary" size="sm" icon={<NotebookPen className="size-3.5" />} onClick={() => navigate(`/notas?nueva=1&lead=${lead.id}`)}>Registrar seguimiento</Button>
             <Button size="sm" icon={<FilePlus2 className="size-3.5" />} onClick={() => navigate('/cotizaciones/nueva')}>Nueva Cotización</Button>
+            {canDelete && <Button variant="danger" size="sm" icon={<Trash2 className="size-3.5" />} loading={removeLead.isPending} onClick={onDelete}>Eliminar</Button>}
           </div>
         </div>
       </Card>
@@ -175,11 +192,11 @@ export function LeadDetailPage() {
 
       {tab === 'Actividad' && (
         <Card className="pb-3">
-          <ul className="px-5 pt-4">
-            {activity.data?.map((a) => (
+          {activity.isLoading ? <PageLoader /> : !activity.data?.length ? <EmptyState title="Sin actividad" text="Aún no hay movimientos registrados para este lead." /> : <ul className="px-5 pt-4">
+            {activity.data.map((a) => (
               <li key={a.id} className="flex gap-3 py-3"><span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full', toneDot[a.tone])} /><div><p className="text-[13px] font-semibold">{a.title}</p><p className="text-xs text-navy-500">{a.detail}</p><p className="mt-0.5 text-[11px] text-navy-300">{relativeTime(a.at)}</p></div></li>
             ))}
-          </ul>
+          </ul>}
         </Card>
       )}
 

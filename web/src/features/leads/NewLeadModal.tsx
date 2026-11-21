@@ -1,8 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Button, Field, Input, Modal, Select } from '@/components/ui'
+import { useAuth } from '@/app/auth'
 import { useToast } from '@/app/toast'
 import { useCreateLead, useUpdateLead, useUsers } from '@/hooks/queries'
-import { sourceLabel } from '@/lib/labels'
+import { leadSourceOptions } from '@/services/mappers/leads'
 import type { Lead, LeadSource } from '@/types/domain'
 
 const empty = { name: '', company: '', email: '', phone: '', source: 'web' as LeadSource, value: '', ownerId: '' }
@@ -10,6 +11,7 @@ const empty = { name: '', company: '', email: '', phone: '', source: 'web' as Le
 /** Crea un lead nuevo o, si recibe `lead`, edita uno existente. */
 export function NewLeadModal({ open, onClose, lead }: { open: boolean; onClose: () => void; lead?: Lead }) {
   const toast = useToast()
+  const { user } = useAuth()
   const users = useUsers()
   const create = useCreateLead()
   const update = useUpdateLead()
@@ -29,7 +31,9 @@ export function NewLeadModal({ open, onClose, lead }: { open: boolean; onClose: 
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
-    const input = { ...form, value: Number(form.value || 0), ownerId: form.ownerId || undefined }
+    const value = Number(form.value || 0)
+    // Al crear, "Asignarme a mí" = el usuario de la sesión. Al editar, '' = sin responsable.
+    const input = { ...form, value, ownerId: lead ? form.ownerId : form.ownerId || user?.id }
     if (lead) update.mutate({ id: lead.id, input }, { onSuccess: done('Lead actualizado'), onError: (err) => toast.error(err.message) })
     else create.mutate(input, { onSuccess: done('Lead creado correctamente'), onError: (err) => toast.error(err.message) })
   }
@@ -53,13 +57,13 @@ export function NewLeadModal({ open, onClose, lead }: { open: boolean; onClose: 
         <Field label="Teléfono"><Input value={form.phone} onChange={set('phone')} placeholder="+502 5555 0000" /></Field>
         <Field label="Fuente">
           <Select value={form.source} onChange={set('source')}>
-            {Object.entries(sourceLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {leadSourceOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
         </Field>
         <Field label="Valor estimado (Q)"><Input type="number" min={0} value={form.value} onChange={set('value')} placeholder="0" /></Field>
         <Field label="Responsable" className="sm:col-span-2">
           <Select value={form.ownerId} onChange={set('ownerId')}>
-            <option value="">Asignarme a mí</option>
+            <option value="">{lead ? 'Sin asignar' : 'Asignarme a mí'}</option>
             {users.data?.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
           </Select>
         </Field>

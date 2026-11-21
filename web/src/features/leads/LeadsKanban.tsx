@@ -4,7 +4,8 @@ import { Avatar } from '@/components/ui'
 import { useUpdateLeadStatus } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { money, relativeTime } from '@/lib/format'
-import { leadStatusMeta, leadStatusOrder, sourceLabel, toneColor } from '@/lib/labels'
+import { leadStatusMeta, leadStatusOrder, toneColor } from '@/lib/labels'
+import { leadSourceLabel } from '@/services/mappers/leads'
 import type { Lead, LeadStatus } from '@/types/domain'
 
 function LeadCard({ lead, dragging }: { lead: Lead; dragging?: boolean }) {
@@ -19,7 +20,7 @@ function LeadCard({ lead, dragging }: { lead: Lead; dragging?: boolean }) {
       </div>
       <div className="mt-3 flex items-center justify-between text-xs">
         <span className="num font-semibold text-navy-900">{money(lead.value)}</span>
-        <span className="text-navy-300">{sourceLabel[lead.source]}</span>
+        <span className="text-navy-300">{leadSourceLabel(lead.source)}</span>
       </div>
       <p className="mt-1.5 text-[11px] text-navy-300">Contacto {relativeTime(lead.lastContactAt)}</p>
     </div>

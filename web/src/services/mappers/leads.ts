@@ -1,4 +1,4 @@
-import type { ActivityItem, Lead, LeadSource, LeadStatus, Note } from '@/types/domain'
+import type { ActivityItem, Lead, LeadSource, LeadStatus, Note, NoteType } from '@/types/domain'
 
 /* ───────────── Formas de la API (NestJS) ───────────── */
 
@@ -49,7 +49,7 @@ export interface ApiActivityEvent {
   creadoEn: string
 }
 
-export type ApiFollowUpType = 'CALL' | 'MEETING' | 'EMAIL' | 'WHATSAPP' | 'TASK'
+export type ApiFollowUpType = NoteType
 export type ApiFollowUpStatus = 'PENDING' | 'DONE' | 'CANCELLED'
 
 export interface ApiFollowUp {

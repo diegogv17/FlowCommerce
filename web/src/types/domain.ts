@@ -166,6 +166,10 @@ export interface Customer {
   averageTicket: number
   lastActivityAt: string
   createdAt: string
+  /** Responsable (userId) en la API */
+  ownerId?: ID | null
+  /** Notas libres del cliente (la dirección se guarda aquí, la API no tiene campo propio) */
+  notes?: string
 }
 
 export interface CustomersSummary {
@@ -191,12 +195,17 @@ export interface Product {
   description: string
   unitPrice: number
   active: boolean
+  /** Unidad de venta en la API (unidad, hora, mes, servicio…). `kind` se deriva de aquí. */
+  unit?: string
+  /** Descuento máximo permitido por partida al cotizar (%) */
+  maxDiscountPercent?: number
 }
 
 export type ProductInput = Pick<
   Product,
   'sku' | 'name' | 'kind' | 'category' | 'description' | 'unitPrice' | 'active'
->
+> &
+  Partial<Pick<Product, 'unit' | 'maxDiscountPercent'>>
 
 /* ───────────── Cotizaciones ───────────── */
 
@@ -207,13 +216,19 @@ export type QuoteStatus =
   | 'aprobada'
   | 'rechazada'
 
+/** Estado real de la cotización en la API (las acciones dependen de este). */
+export type ApiQuoteStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'SENT' | 'ACCEPTED' | 'PAID' | 'REJECTED'
+
 export interface QuoteItem {
   id: ID
   productId?: ID | null
   description: string
   quantity: number
+  /** Precio de lista del catálogo, antes de IVA */
   unitPrice: number
+  /** Importe de la partida: cantidad × precio − descuento de línea (antes de IVA) */
   amount: number
+  discountPercent?: number
 }
 
 export interface Quote {
@@ -228,16 +243,53 @@ export interface Quote {
   issuedAt: string
   validUntil: string
   items: QuoteItem[]
-  /** Suma de conceptos (los precios ya incluyen IVA) */
+  /** Suma bruta de las partidas (precios antes de IVA) */
   subtotal: number
+  /** Suma de descuentos de línea */
   discount: number
   total: number
   conditions: string
   notes: string
   /** true cuando la cotización fue preparada por el asistente de IA */
   aiGenerated: boolean
-  /** true mientras un asesor no la haya revisado y aprobado */
+  /** true mientras la cotización no haya sido aprobada internamente (DRAFT o PENDING_APPROVAL) */
   reviewRequired: boolean
+  /** Estado real en la API */
+  apiStatus?: ApiQuoteStatus
+  leadId?: ID
+  leadName?: string
+  /** Ajuste comercial: descuento global en dinero, antes de IVA */
+  adjustment?: number
+  /** IVA en dinero y su porcentaje (lo calcula la API sobre subtotal − descuentos − ajuste) */
+  tax?: number
+  taxPercent?: number
+}
+
+/** Resultado de POST /assistant/quote-draft (la cotización ya queda guardada en borrador). */
+export interface AiQuoteDraftResult {
+  id: ID
+  folio: string
+  summary: string
+  warnings: string[]
+}
+
+/** Lead elegible para cotizar (la API exige un lead en cada cotización). */
+export interface QuoteLeadOption {
+  id: ID
+  name: string
+  company: string
+  email: string
+  phone: string
+  clientId: ID | null
+  clientName: string | null
+}
+
+/** Ajustes de cotización de la empresa (GET /projects/:id → quoteSettings). */
+export interface QuoteSettings {
+  taxPercent: number
+  validityDays: number
+  defaultTerms: string | null
+  currency: string
 }
 
 export interface QuoteSummary {
@@ -250,13 +302,20 @@ export interface QuoteSummary {
 }
 
 export interface QuoteInput {
-  customerId: ID
+  /** Lead dueño de la cotización (obligatorio en la API) */
+  leadId: ID
+  /** Si se omite, la API usa el cliente del lead */
+  customerId?: ID | null
+  /** Fecha YYYY-MM-DD (vence al final de ese día) */
   validUntil: string
+  /** Ajuste comercial: descuento global en dinero, antes de IVA */
   discount: number
   conditions: string
   notes?: string
+  /** 'borrador' (por defecto) o 'pendiente' = crear y enviar a aprobación */
   status?: QuoteStatus
-  items: Array<Pick<QuoteItem, 'productId' | 'description' | 'quantity' | 'unitPrice'>>
+  /** Los precios salen del catálogo: solo producto, cantidad y descuento % */
+  items: Array<{ productId: ID; quantity: number; discountPercent?: number; description?: string }>
 }
 
 /* ───────────── Notas / seguimientos ───────────── */

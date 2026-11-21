@@ -67,6 +67,19 @@ export function useUpdateLead() {
   })
 }
 
+export function useDeleteLead() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: leadsService.remove,
+    onSuccess: (_d, id) => {
+      qc.removeQueries({ queryKey: qk.lead(id) })
+      qc.invalidateQueries({ queryKey: ['leads'] })
+      qc.invalidateQueries({ queryKey: ['notes'] })
+      qc.invalidateQueries({ queryKey: qk.dashboard })
+    },
+  })
+}
+
 /** Cambia el estado de un lead con actualización optimista (kanban). */
 export function useUpdateLeadStatus() {
   const qc = useQueryClient()
@@ -82,8 +95,10 @@ export function useUpdateLeadStatus() {
       return { snapshots }
     },
     onError: (_e, _v, ctx) => ctx?.snapshots.forEach(([key, data]) => qc.setQueryData(key, data)),
-    onSettled: () => {
+    onSettled: (_d, _e, { id }) => {
       qc.invalidateQueries({ queryKey: ['leads'] })
+      qc.invalidateQueries({ queryKey: qk.lead(id) })
+      qc.invalidateQueries({ queryKey: ['lead-activity', id] })
       qc.invalidateQueries({ queryKey: qk.dashboard })
     },
   })
@@ -200,20 +215,28 @@ export function useUpdateQuoteStatus() {
 /* Notas */
 export const useNotes = (params: { leadId?: string; done?: boolean } = {}) =>
   useQuery({ queryKey: qk.notes(params), queryFn: () => notesService.list(params) })
+/** Los seguimientos cambian el "próximo seguimiento" / "último contacto" del lead y la actividad. */
+function invalidateNotes(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ['notes'] })
+  qc.invalidateQueries({ queryKey: ['leads'] })
+  qc.invalidateQueries({ queryKey: ['lead'] })
+  qc.invalidateQueries({ queryKey: ['lead-activity'] })
+  qc.invalidateQueries({ queryKey: qk.dashboard })
+}
 export function useCreateNote() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: notesService.create, onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }) })
+  return useMutation({ mutationFn: notesService.create, onSuccess: () => invalidateNotes(qc) })
 }
 export function useUpdateNote() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: ({ id, ...input }: { id: string; done?: boolean; body?: string }) => notesService.update(id, input),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+    mutationFn: ({ id, ...input }: { id: string; done?: boolean; body?: string; followUpAt?: string | null }) => notesService.update(id, input),
+    onSuccess: () => invalidateNotes(qc),
   })
 }
 export function useDeleteNote() {
   const qc = useQueryClient()
-  return useMutation({ mutationFn: notesService.remove, onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }) })
+  return useMutation({ mutationFn: notesService.remove, onSuccess: () => invalidateNotes(qc) })
 }
 
 /* Notificaciones */

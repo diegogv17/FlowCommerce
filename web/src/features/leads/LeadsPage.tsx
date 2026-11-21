@@ -4,7 +4,8 @@ import { Plus } from 'lucide-react'
 import { Button, Card, ErrorState, PageHeader, Pagination, PageLoader, Segmented, SearchInput, Select } from '@/components/ui'
 import { useDashboard, useLeads, useUsers } from '@/hooks/queries'
 import { money } from '@/lib/format'
-import { leadStatusMeta, leadStatusOrder, sourceLabel } from '@/lib/labels'
+import { leadStatusMeta, leadStatusOrder } from '@/lib/labels'
+import { leadSourceOptions } from '@/services/mappers/leads'
 import type { LeadFilters, LeadSource, LeadStatus } from '@/types/domain'
 import { LeadsKanban } from './LeadsKanban'
 import { LeadsTable } from './LeadsTable'
@@ -75,7 +76,7 @@ export function LeadsPage() {
           </Select>
           <Select className="w-auto min-w-36 rounded-full" value={source} onChange={(e) => reset(setSource)(e.target.value as LeadSource | '')}>
             <option value="">Fuente</option>
-            {Object.entries(sourceLabel).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            {leadSourceOptions.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
           </Select>
           <Select className="w-auto min-w-36 rounded-full" value={period} onChange={(e) => reset(setPeriod)(e.target.value as LeadFilters['period'])}>
             <option value="">Fecha</option>
