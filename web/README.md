@@ -1,74 +1,45 @@
 # FlowCommerce CRM · Frontend
 
-Interfaz web del CRM de FlowCommerce para la conversión de leads y la atención con respuestas asistidas por IA.
+Interfaz web del CRM (diseño del equipo de frontend), conectada a la API de FlowCommerce y a Supabase Auth.
 
-**Stack:** React 19 · TypeScript · Vite · Tailwind CSS 4 · React Router · TanStack Query · Recharts · dnd-kit
+**Stack:** React 19 · TypeScript · Vite · Tailwind CSS 4 · React Router · TanStack Query · Supabase JS · Recharts · dnd-kit
 
 ## Puesta en marcha
 
-```bash
-npm install
-cp .env.example .env
-npm run dev
-```
-
-La aplicación abre en <http://localhost:5173>. Con `VITE_USE_MOCKS=true` (valor por defecto) funciona sin
-backend y acepta cualquier correo y contraseña.
-
-| Comando | Descripción |
-| --- | --- |
-| `npm run dev` | Servidor de desarrollo |
-| `npm run build` | Revisión de tipos + build de producción en `dist/` |
-| `npm run preview` | Sirve el build localmente |
-| `npm run lint` | Análisis estático |
-
-## Módulos
-
-Dashboard · Leads (tabla, pipeline kanban y ficha del lead) · Conversaciones con sugerencias de IA y panel del lead ·
-Cotizaciones (listado, creación manual o con IA y documento imprimible) · Clientes (listado y ficha) · Productos y servicios ·
-Notificaciones · Configuración (perfil, usuarios y asistente de IA).
-
-## Estructura
-
-```
-src/
-├── app/            Providers, rutas, autenticación y notificaciones
-├── components/
-│   ├── layout/     Sidebar, Topbar, layout principal, logotipo
-│   └── ui/         Componentes base (botones, formularios, tablas, modales…)
-├── config/         Variables de entorno
-├── features/       Una carpeta por módulo (pantallas y componentes propios)
-├── hooks/          Consultas y mutaciones (TanStack Query)
-├── lib/            Formatos (moneda, fechas), etiquetas y utilidades
-├── mocks/          Datos y servidor simulado en memoria
-├── services/       Capa de acceso a la API  ← punto de integración con el backend
-├── styles/         Tokens de marca y estilos globales
-└── types/          Modelos de dominio compartidos
-```
-
-## Integración con el backend
-
-Toda la comunicación pasa por `src/services/`. Cada módulo tiene su archivo (`leads.service.ts`,
-`quotes.service.ts`, …) con funciones que llaman a un único cliente HTTP (`http.ts`), que ya se encarga del token,
-los errores y el cierre de sesión en 401.
-
-El contrato completo de endpoints está en [`docs/API.md`](docs/API.md). Para pasar de datos simulados a la API real:
+Desde la raíz del repositorio (workspace de pnpm):
 
 ```bash
-# .env
-VITE_USE_MOCKS=false
-VITE_API_URL=https://api.tu-dominio.com/v1
+pnpm install
+cp web/.env.example web/.env      # en Windows: copy web\.env.example web\.env
+pnpm web:dev                      # http://localhost:3001
 ```
 
-## Identidad de marca
+La API debe estar corriendo (`pnpm start:dev` en la raíz, puerto 3000) con `CORS_ORIGINS=http://localhost:3001`.
 
-Los tokens definidos en `src/styles/index.css` siguen el manual de marca:
-
-| Token | Color |
+| Variable | Ejemplo |
 | --- | --- |
-| Flow Blue | `#3B82F6` |
-| Navy | `#0F172A` |
-| Teal Green | `#10B981` |
-| Light Neutral | `#F3F6FA` |
+| `VITE_API_URL` | `http://localhost:3000/api/v1` |
+| `VITE_SUPABASE_URL` | `https://<proyecto>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | anon / publishable key (es pública) |
 
-Tipografías: **Poppins** (títulos y KPIs), **IBM Plex Sans** (interfaz) e **IBM Plex Mono** (montos, folios y fechas).
+| Comando (en `web/`) | Descripción |
+| --- | --- |
+| `pnpm dev` | Servidor de desarrollo |
+| `pnpm build` | Revisión de tipos + build de producción en `dist/` |
+| `pnpm lint` | Análisis estático (oxlint) |
+
+## Cómo se conecta con el backend
+
+- **Sesión:** Supabase hace login/registro/recuperación (`src/lib/supabase.ts`). La API solo recibe `Authorization: Bearer <token>`.
+- **Empresa activa:** casi todo vive en `/projects/:projectId/...`. `src/app/auth.tsx` carga el perfil y las empresas (`/users/me`, `/projects/my`) y fija la empresa activa; los servicios usan `pp('/leads')`.
+- **Servicios:** `src/services/*.service.ts` llaman a la API real y traducen sus formas a los tipos de la interfaz (`src/types/domain.ts`). Los mapeos de estados/fuentes están en `src/services/mappers/`.
+- **Datos que la API no guarda** (preferencias de IA, IA por chat): se guardan en el navegador y la pantalla lo indica.
+
+## Pantallas
+
+Cuenta: login, registro, onboarding (crear empresa), invitación, solicitar acceso, recuperar/restablecer contraseña, `/auth/callback`.
+App: Dashboard · Leads (tabla, pipeline y ficha) · Conversaciones de WhatsApp con sugerencias e insight de IA · Cotizaciones (manual o con IA, aprobación, PDF, envío por correo) · Clientes · Productos y servicios · Notas y seguimientos · Notificaciones · Configuración (perfil, usuarios e invitaciones, empresa, IA).
+
+## Despliegue (Vercel)
+
+Root Directory `web`, Framework **Vite** (lo fija `vercel.json`, que además redirige todas las rutas a `index.html`). Variables: las tres `VITE_*` de arriba con los valores de producción.
