@@ -170,8 +170,8 @@ export interface AiSuggestion {
 export interface LeadInsight {
   summary: string
   nextBestAction: string
-  /** 0..100 */
-  closeProbability: number
+  /** 0..100; null cuando no hay datos suficientes para estimarla. */
+  closeProbability: number | null
   risks: string[]
   suggestedFollowUpDays: number
   generatedAt: string
