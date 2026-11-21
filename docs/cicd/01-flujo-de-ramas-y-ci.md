@@ -18,7 +18,7 @@ feat/x ──PR──▶ develop ──(CI ✔ + migración a staging)──PR r
 
 1. **API**: lint sin `--fix`, `tsc --noEmit`, pruebas unitarias con cobertura y `nest build`.
 2. **API e2e**: Postgres 17 efímero, aplica **todas** las migraciones desde cero, comprueba que `schema.ts` no tenga cambios sin migración y corre los e2e.
-3. **Web**: typecheck, Vitest y `next build`.
+3. **Web**: oxlint y `tsc -b && vite build` (React + Vite).
 
 Buenas prácticas aplicadas: `--frozen-lockfile`, versión de pnpm fijada en `packageManager`, caché de pnpm y de Next, `concurrency` que cancela runs viejos, permisos mínimos (`contents: read`), `timeout-minutes` y ningún secreto en CI.
 
