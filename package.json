@@ -36,7 +36,7 @@
     "web:build": "pnpm --filter @flowcommerce/web build"
   },
   "dependencies": {
-    "@ai-sdk/google": "^2.0.23",
+    "@ai-sdk/google": "^3.0.143",
     "@flowcommerce/types": "workspace:*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -45,7 +45,7 @@
     "@nestjs/schedule": "^5.0.1",
     "@nestjs/swagger": "^11.2.0",
     "@nestjs/throttler": "^6.4.0",
-    "ai": "^5.0.80",
+    "ai": "^6.0.325",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.2",
     "drizzle-orm": "^0.44.5",
@@ -104,6 +104,22 @@
     "testEnvironment": "node",
     "moduleNameMapper": {
       "^@flowcommerce/types$": "<rootDir>/../packages/types/src/index.ts"
+    },
+    "coverageThreshold": {
+      "global": {
+        "statements": 40,
+        "branches": 33,
+        "functions": 35,
+        "lines": 40
+      },
+      "./src/assistant/application/": {
+        "lines": 70,
+        "branches": 55
+      },
+      "./src/assistant/domain/": {
+        "lines": 85,
+        "branches": 80
+      }
     }
   }
 }

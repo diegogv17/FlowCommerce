@@ -1,18 +1,22 @@
+import { randomBytes } from 'node:crypto';
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import {
   APICallError,
+  InvalidToolApprovalSignatureError,
   NoObjectGeneratedError,
+  NoOutputGeneratedError,
+  Output,
   convertToModelMessages,
-  generateObject,
+  generateText,
   stepCountIs,
   streamText,
   type LanguageModel,
 } from 'ai';
-import type { z } from 'zod';
 import {
   BadGatewayException,
+  BadRequestException,
   ServiceUnavailableException,
 } from '../../common/exceptions/domain.exceptions';
 import type {
@@ -24,19 +28,38 @@ import type {
 
 export const DEFAULT_GEMINI_MODEL = 'gemini-2.5-flash';
 
-// Adaptador de Google Gemini con el Vercel AI SDK. La clave se lee una vez al
-// arrancar: sin GEMINI_API_KEY el adaptador queda "no configurado" y los casos
-// de uso responden 503 en lugar de tumbar la app.
+// Adaptador de Google Gemini con el Vercel AI SDK (v6). La clave se lee una vez
+// al arrancar: sin GEMINI_API_KEY el adaptador queda "no configurado" y los
+// casos de uso responden 503 en lugar de tumbar la app. La clave nunca sale
+// del servidor: el navegador solo habla con esta API.
 @Injectable()
 export class GeminiAiModelProvider implements AiModelProvider {
   private readonly logger = new Logger(GeminiAiModelProvider.name);
   private readonly model: LanguageModel | null;
+  // Firma HMAC de las solicitudes de aprobación (needsApproval): el servidor
+  // firma cada solicitud y verifica la firma cuando el navegador la devuelve,
+  // así un cliente no puede fabricar una aprobación que el modelo nunca pidió.
+  private readonly toolApprovalSecret: string;
 
   constructor(config: ConfigService) {
     const apiKey = config.get<string>('GEMINI_API_KEY')?.trim();
     const modelId =
       config.get<string>('GEMINI_MODEL')?.trim() || DEFAULT_GEMINI_MODEL;
     this.model = apiKey ? createGoogleGenerativeAI({ apiKey })(modelId) : null;
+
+    const secret = config.get<string>('AI_TOOL_APPROVAL_SECRET')?.trim();
+    if (secret) {
+      this.toolApprovalSecret = secret;
+    } else {
+      // Sin secreto fijo funciona igual, pero las aprobaciones pendientes no
+      // sobreviven a un reinicio ni se comparten entre réplicas.
+      this.toolApprovalSecret = randomBytes(32).toString('hex');
+      if (apiKey) {
+        this.logger.warn(
+          'AI_TOOL_APPROVAL_SECRET no está definido: se usa uno aleatorio por proceso.',
+        );
+      }
+    }
   }
 
   isConfigured(): boolean {
@@ -46,38 +69,46 @@ export class GeminiAiModelProvider implements AiModelProvider {
   async generateStructured<T>(input: GenerateStructuredInput<T>): Promise<T> {
     const model = this.requireModel();
     try {
-      // El esquema se pasa con un tipo concreto para que la inferencia de
-      // generateObject no dependa del genérico T; la validación en tiempo de
-      // ejecución la hace igual el esquema real.
-      const result = await generateObject({
+      // Output.object: el SDK convierte el esquema zod (con sus .describe())
+      // a JSON Schema para Gemini y VALIDA la respuesta antes de devolverla.
+      // Si no cumple el esquema lanza NoObjectGeneratedError (→ 502).
+      const result = await generateText({
         model,
-        output: 'object',
         system: input.system,
         prompt: input.prompt,
-        schema: input.schema as unknown as z.ZodType<Record<string, unknown>>,
-        schemaName: input.schemaName,
-        schemaDescription: input.schemaDescription,
+        output: Output.object({
+          schema: input.schema,
+          name: input.schemaName,
+          description: input.schemaDescription,
+        }),
         abortSignal: input.abortSignal,
         // Respuestas comerciales: algo de variedad, sin inventiva excesiva.
         temperature: 0.4,
         maxRetries: 1,
       });
-      return result.object as unknown as T;
+      return result.output;
     } catch (error) {
       throw this.translate(error);
     }
   }
 
-  streamChat(input: StreamChatInput): AiChatStream {
+  async streamChat(input: StreamChatInput): Promise<AiChatStream> {
     const model = this.requireModel();
+    // En v6 la conversión es asíncrona. Aquí también se convierten las
+    // respuestas de aprobación (approval-responded) en mensajes de modelo.
+    const messages = await convertToModelMessages(input.messages, {
+      tools: input.tools,
+      ignoreIncompleteToolCalls: true,
+    });
     const result = streamText({
       model,
       system: input.system,
-      messages: convertToModelMessages(input.messages),
+      messages,
       tools: input.tools,
       // Tool calling en varios pasos: el modelo consulta herramientas y con
       // sus resultados redacta la respuesta; se corta a los N pasos.
       stopWhen: stepCountIs(input.maxSteps),
+      experimental_toolApprovalSecret: this.toolApprovalSecret,
       abortSignal: input.abortSignal,
       temperature: 0.3,
       maxRetries: 1,
@@ -90,6 +121,9 @@ export class GeminiAiModelProvider implements AiModelProvider {
     return {
       pipeToResponse: (response) => {
         void result.pipeUIMessageStreamToResponse(response, {
+          // Se reenvía el historial original para que el SDK conserve los ids
+          // de los mensajes y de las solicitudes de aprobación.
+          originalMessages: input.messages,
           sendReasoning: false,
           // El detalle técnico se queda en el log; el usuario ve un mensaje
           // entendible dentro del chat.
@@ -117,6 +151,11 @@ export class GeminiAiModelProvider implements AiModelProvider {
       return error;
     }
     this.logger.error(`Error de Gemini: ${describeError(error)}`);
+    if (InvalidToolApprovalSignatureError.isInstance(error)) {
+      return new BadRequestException(
+        'La aprobación de la acción no es válida o expiró. Pide la acción de nuevo.',
+      );
+    }
     if (APICallError.isInstance(error)) {
       if (error.statusCode === 429) {
         return new ServiceUnavailableException(
@@ -129,7 +168,10 @@ export class GeminiAiModelProvider implements AiModelProvider {
         );
       }
     }
-    if (NoObjectGeneratedError.isInstance(error)) {
+    if (
+      NoObjectGeneratedError.isInstance(error) ||
+      NoOutputGeneratedError.isInstance(error)
+    ) {
       return new BadGatewayException(
         'La IA devolvió una respuesta con formato inválido. Intenta de nuevo.',
       );
