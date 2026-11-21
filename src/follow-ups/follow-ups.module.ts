@@ -34,5 +34,8 @@ import { FollowUpsController } from './presentation/controllers/follow-ups.contr
     UpdateFollowUpUseCase,
     DeleteFollowUpUseCase,
   ],
+  // El asistente de IA crea seguimientos (con aprobación del usuario) con el
+  // MISMO caso de uso que la pantalla: permisos, lead del proyecto y actividad.
+  exports: [CreateFollowUpUseCase],
 })
 export class FollowUpsModule {}
