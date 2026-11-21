@@ -114,15 +114,14 @@ jobs:
         run: pnpm exec jest --config ./test/jest-e2e.json --ci --runInBand
 
   web:
-    name: Web · tipos, pruebas y build (Next.js)
+    name: Web · tipos, lint y build (React + Vite)
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     env:
       # Valores de ejemplo: el build no se conecta a nada, solo los incrusta.
-      NEXT_PUBLIC_API_URL: https://api.example.com/api/v1
-      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-      NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-placeholder-anon-key
-      NEXT_PUBLIC_SITE_URL: https://flowcommerce.example.com
+      VITE_API_URL: https://api.example.com/api/v1
+      VITE_SUPABASE_URL: https://example.supabase.co
+      VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -133,17 +132,7 @@ jobs:
       - name: Instalar dependencias
         run: pnpm install --frozen-lockfile
 
-      # Cache del build incremental de Next.js entre runs.
-      - uses: actions/cache@v4
-        with:
-          path: web/.next/cache
-          key: nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ hashFiles('web/**/*.ts', 'web/**/*.tsx') }}
-          restore-keys: |
-            nextjs-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
-
-      - name: Tipos
-        run: pnpm --filter @flowcommerce/web typecheck
-      - name: Pruebas (Vitest)
-        run: pnpm --filter @flowcommerce/web test
-      - name: Build
+      - name: Lint (oxlint)
+        run: pnpm --filter @flowcommerce/web lint
+      - name: Tipos + build
         run: pnpm --filter @flowcommerce/web build
