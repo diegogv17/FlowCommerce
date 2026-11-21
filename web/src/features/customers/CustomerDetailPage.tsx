@@ -5,7 +5,7 @@ import { Avatar, Badge, Button, Card, CardHeader, EmptyState, ErrorState, PageLo
 import { useCustomer, useCustomerQuotes } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { formatDate, money, moneyExact, relativeTime } from '@/lib/format'
-import { quoteStatusMeta } from '@/lib/labels'
+import { quoteBadge } from '@/features/quotes/status'
 
 const tabs = ['Resumen', 'Cotizaciones', 'Actividad'] as const
 type Tab = (typeof tabs)[number]
@@ -25,10 +25,11 @@ export function CustomerDetailPage() {
   const since = new Intl.DateTimeFormat('es-GT', { month: 'long', year: 'numeric' }).format(new Date(c.createdAt))
   const info: Array<[string, string, boolean?]> = [
     ['Empresa', c.name],
-    ['NIT', c.nit, true],
-    ['Correo', c.email],
-    ['Teléfono', c.phone, true],
-    ['Dirección', c.address],
+    ['NIT', c.nit || '—', true],
+    ['Contacto', c.contactRole ? `${c.contactName} · ${c.contactRole}` : c.contactName],
+    ['Correo', c.email || '—'],
+    ['Teléfono', c.phone || '—', true],
+    ['Dirección', c.address || '—'],
     ['Responsable', c.ownerName],
     ['Cliente desde', formatDate(c.createdAt), true],
   ]
@@ -49,11 +50,11 @@ export function CustomerDetailPage() {
             <p className="mt-0.5 text-sm text-navy-400">{c.name} · Cliente desde {since}</p>
           </div>
           <div className="flex gap-8 pr-2">
-            <div><p className={label}>Ventas totales</p><p className="num mt-1 font-display text-xl font-semibold text-teal-600">{money(c.totalSold)}</p></div>
+            <div><p className={label} title="Suma de cotizaciones pagadas">Ventas totales</p><p className="num mt-1 font-display text-xl font-semibold text-teal-600">{money(c.totalSold)}</p></div>
             <div><p className={label}>Cotizaciones</p><p className="mt-1 font-display text-xl font-semibold">{c.quotesCount}</p></div>
-            <div><p className={label}>Ticket promedio</p><p className="num mt-1 font-display text-xl font-semibold">{money(c.averageTicket)}</p></div>
+            <div><p className={label} title="Ventas ÷ cotizaciones pagadas">Ticket promedio</p><p className="num mt-1 font-display text-xl font-semibold">{money(c.averageTicket)}</p></div>
           </div>
-          <Button icon={<FilePlus2 className="size-4" />} onClick={() => navigate('/cotizaciones/nueva')}>Nueva Cotización</Button>
+          <Button icon={<FilePlus2 className="size-4" />} onClick={() => navigate(`/cotizaciones/nueva?cliente=${c.id}`)}>Nueva Cotización</Button>
         </div>
       </Card>
 
@@ -75,8 +76,8 @@ export function CustomerDetailPage() {
               <ul className="mt-3 px-5">
                 {history.slice(0, 5).map((q) => (
                   <li key={q.id} className="flex gap-3 py-3">
-                    <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full', q.status === 'aprobada' ? 'bg-teal-500' : q.status === 'rechazada' ? 'bg-red-500' : 'bg-flow-500')} />
-                    <div><p className="text-[13px] font-semibold">Cotización {q.folio} · {quoteStatusMeta[q.status].label.toLowerCase()}</p><p className="num text-xs text-navy-500">{moneyExact(q.total)}</p><p className="mt-0.5 text-[11px] text-navy-300">{relativeTime(q.issuedAt)}</p></div>
+                    <span className={cn('mt-1.5 size-2.5 shrink-0 rounded-full', q.apiStatus === 'ACCEPTED' || q.apiStatus === 'PAID' ? 'bg-teal-500' : q.status === 'rechazada' ? 'bg-red-500' : 'bg-flow-500')} />
+                    <div><p className="text-[13px] font-semibold">Cotización {q.folio} · {quoteBadge(q).label.toLowerCase()}</p><p className="num text-xs text-navy-500">{moneyExact(q.total)}</p><p className="mt-0.5 text-[11px] text-navy-300">{relativeTime(q.issuedAt)}</p></div>
                   </li>
                 ))}
               </ul>
@@ -90,7 +91,7 @@ export function CustomerDetailPage() {
           {quotes.isLoading ? <PageLoader /> : !quotes.data?.length ? <EmptyState title="Sin cotizaciones" text="Aún no hay cotizaciones para este cliente." /> : (
             <ul className="divide-y divide-navy-100/60 px-2 pt-2">
               {quotes.data.map((q) => (
-                <li key={q.id}><button onClick={() => navigate(`/cotizaciones/${q.id}`)} className="flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left hover:bg-navy-50/60"><span className="num w-20 text-[13px] font-medium text-flow-600">{q.folio}</span><span className="num flex-1 text-xs text-navy-400">{formatDate(q.issuedAt)}</span><Badge tone={quoteStatusMeta[q.status].tone} dot>{quoteStatusMeta[q.status].label}</Badge><span className="num w-32 text-right text-[13px] font-medium">{moneyExact(q.total)}</span></button></li>
+                <li key={q.id}><button onClick={() => navigate(`/cotizaciones/${q.id}`)} className="flex w-full items-center gap-4 rounded-xl px-3 py-3.5 text-left hover:bg-navy-50/60"><span className="num w-20 text-[13px] font-medium text-flow-600">{q.folio}</span><span className="num flex-1 text-xs text-navy-400">{formatDate(q.issuedAt)}</span><Badge tone={quoteBadge(q).tone} dot>{quoteBadge(q).label}</Badge><span className="num w-32 text-right text-[13px] font-medium">{moneyExact(q.total)}</span></button></li>
               ))}
             </ul>
           )}

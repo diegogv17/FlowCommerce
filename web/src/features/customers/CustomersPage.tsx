@@ -53,12 +53,12 @@ export function CustomersPage() {
           <>
             <div className="scroll-thin overflow-x-auto">
               <table className="w-full min-w-[920px] text-[13px]">
-                <thead><tr className="border-b border-navy-100/70"><th className={th}>Cliente</th><th className={th}>Contacto</th><th className={`${th} text-center`}>Operaciones</th><th className={`${th} text-right`}>Ventas</th><th className={th}>Última actividad</th><th className={th}>Responsable</th><th className={th} /></tr></thead>
+                <thead><tr className="border-b border-navy-100/70"><th className={th}>Cliente</th><th className={th}>Contacto</th><th className={`${th} text-center`}>Cotizaciones</th><th className={`${th} text-right`}>Ventas</th><th className={th}>Última actividad</th><th className={th}>Responsable</th><th className={th} /></tr></thead>
                 <tbody className="divide-y divide-navy-100/60">
                   {data.data.map((c) => (
                     <tr key={c.id} onClick={() => navigate(`/clientes/${c.id}`)} className="cursor-pointer hover:bg-navy-50/60">
                       <td className="px-4 py-3.5"><div className="flex items-center gap-3"><Avatar name={c.contactName} size={34} className="bg-teal-500! text-white!" /><div><p className="font-semibold">{c.contactName}</p><p className="text-xs text-navy-400">{c.name}</p></div></div></td>
-                      <td className="px-4 py-3.5"><p>{c.email}</p><p className="num text-xs text-navy-400">{c.phone}</p></td>
+                      <td className="px-4 py-3.5"><p>{c.email || '—'}</p><p className="num text-xs text-navy-400">{c.phone}</p></td>
                       <td className="num px-4 py-3.5 text-center font-medium">{c.quotesCount}</td>
                       <td className="num px-4 py-3.5 text-right font-semibold text-teal-600">{money(c.totalSold)}</td>
                       <td className="px-4 py-3.5 text-navy-500">{relativeTime(c.lastActivityAt)}</td>
@@ -77,12 +77,12 @@ export function CustomersPage() {
       <Modal open={modal} onClose={() => setModal(false)} title="Nuevo cliente" footer={<><Button variant="ghost" onClick={() => setModal(false)}>Cancelar</Button><Button type="submit" form="new-customer" loading={create.isPending}>Guardar cliente</Button></>}>
         <form id="new-customer" onSubmit={submit} className="grid gap-4 sm:grid-cols-2">
           <Field label="Razón social" className="sm:col-span-2"><Input required value={form.name} onChange={set('name')} placeholder="Distribuidora Altamira, S.A." /></Field>
-          <Field label="NIT"><Input required value={form.nit} onChange={set('nit')} placeholder="1234567-8" className="num" /></Field>
+          <Field label="NIT"><Input value={form.nit} onChange={set('nit')} placeholder="1234567-8" className="num" /></Field>
           <Field label="Teléfono"><Input value={form.phone} onChange={set('phone')} placeholder="+502 2200 0000" /></Field>
           <Field label="Contacto"><Input required value={form.contactName} onChange={set('contactName')} /></Field>
           <Field label="Cargo"><Input value={form.contactRole} onChange={set('contactRole')} /></Field>
           <Field label="Correo" className="sm:col-span-2"><Input type="email" value={form.email} onChange={set('email')} /></Field>
-          <Field label="Dirección" className="sm:col-span-2"><Input value={form.address} onChange={set('address')} /></Field>
+          <Field label="Dirección" className="sm:col-span-2" hint="Se guarda en las notas del cliente."><Input value={form.address} onChange={set('address')} /></Field>
         </form>
       </Modal>
     </>

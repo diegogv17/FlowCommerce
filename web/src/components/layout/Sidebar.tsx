@@ -12,7 +12,7 @@ import {
   UserRound,
 } from 'lucide-react'
 import { useAuth } from '@/app/auth'
-import { useConversations, useLeads } from '@/hooks/queries'
+import { useConversationsUnread, useLeads } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { Avatar } from '@/components/ui'
 import { Logo } from './Logo'
@@ -26,8 +26,8 @@ interface Props {
 export function Sidebar({ collapsed, onToggle, onNavigate }: Props) {
   const { user, logout, project, projects, selectProject } = useAuth()
   const leads = useLeads({ pageSize: 1 })
-  const conversations = useConversations({})
-  const unread = (conversations.data ?? []).reduce((a, c) => a + c.unread, 0)
+  // Conversaciones con mensajes sin leer (GET /conversations/unread-count)
+  const unread = useConversationsUnread().data?.conversations ?? 0
   const leadTotal = leads.data?.meta.total
 
   const items = [

@@ -5,7 +5,7 @@ import { Badge, Button, Card, EmptyState, ErrorState, PageLoader, Pagination, Se
 import { useQuotes, useQuoteSummary } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { formatDate, money, moneyExact } from '@/lib/format'
-import { quoteStatusMeta } from '@/lib/labels'
+import { apiQuoteStatusMeta, apiQuoteStatusOrder, quoteBadge } from './status'
 import { AiQuoteModal } from './AiQuoteModal'
 
 const th = 'px-4 py-3 text-left text-[11px] font-semibold tracking-wider text-navy-300 uppercase'
@@ -44,7 +44,7 @@ export function QuotesPage() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-[26px] leading-tight font-semibold">Cotizaciones</h1>
-          <p className="mt-1 text-sm text-navy-400">{s ? `${s.totalCount} cotizaciones este trimestre · ${money(s.totalValue)} en valor total` : ' '}</p>
+          <p className="mt-1 text-sm text-navy-400">{s ? `${s.totalCount} cotizaciones · ${money(s.totalValue)} en valor total (con IVA)` : ' '}</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" className="border-teal-500/40 text-teal-700 hover:bg-teal-50" icon={<Sparkles className="size-4" />} onClick={() => setAi(true)}>Generar con IA</Button>
@@ -56,7 +56,7 @@ export function QuotesPage() {
         <Stat label="Borradores" value={s?.drafts ?? '–'} tone="bg-violet-500" />
         <Stat label="Pendientes" value={s?.pending ?? '–'} tone="bg-amber-500" />
         <Stat label="Enviadas" value={s?.sent ?? '–'} tone="bg-flow-500" />
-        <Stat label="Aprobadas" value={s?.approved ?? '–'} tone="bg-teal-500" />
+        <Stat label="Aprobadas / aceptadas" value={s?.approved ?? '–'} tone="bg-teal-500" />
         <Stat label="Valor total" value={s ? money(s.totalValue) : '–'} tone="bg-navy-700" mono />
       </div>
 
@@ -65,7 +65,7 @@ export function QuotesPage() {
           <SearchInput className="w-full sm:w-72" placeholder="Buscar por folio o cliente…" value={search} onChange={(e) => { setSearch(e.target.value); setPage(1) }} />
           <Select className="w-auto min-w-40 rounded-full" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1) }}>
             <option value="">Estado</option>
-            {Object.entries(quoteStatusMeta).map(([v, m]) => <option key={v} value={v}>{m.label}</option>)}
+            {apiQuoteStatusOrder.map((v) => <option key={v} value={v}>{apiQuoteStatusMeta[v].label}</option>)}
           </Select>
         </div>
 
@@ -82,11 +82,11 @@ export function QuotesPage() {
                   {data.data.map((q) => (
                     <tr key={q.id} onClick={() => navigate(`/cotizaciones/${q.id}`)} className="cursor-pointer transition-colors hover:bg-navy-50/60">
                       <td className="px-4 py-3.5"><span className="num flex items-center gap-1.5 font-medium text-flow-600">{q.folio}{q.aiGenerated && <Sparkles className="size-3.5 text-teal-500" aria-label="Preparada por IA" />}</span></td>
-                      <td className="px-4 py-3.5"><p className="font-semibold">{q.customerName}</p><p className="text-xs text-navy-400">{q.contactName}</p></td>
+                      <td className="px-4 py-3.5"><p className="font-semibold">{q.customerName}</p>{q.contactName && <p className="text-xs text-navy-400">{q.contactName}</p>}</td>
                       <td className="num px-4 py-3.5 text-navy-500">{formatDate(q.issuedAt)}</td>
                       <td className="num px-4 py-3.5 text-right font-medium">{moneyExact(q.total)}</td>
                       <td className="px-4 py-3.5 text-navy-600">{q.advisorName}</td>
-                      <td className="px-4 py-3.5"><Badge tone={q.reviewRequired ? 'amber' : quoteStatusMeta[q.status].tone}>{q.reviewRequired ? 'Pendiente de aprobación' : quoteStatusMeta[q.status].label}</Badge></td>
+                      <td className="px-4 py-3.5"><Badge tone={quoteBadge(q).tone}>{quoteBadge(q).label}</Badge></td>
                       <td className="px-4 py-3.5 text-right"><span className="rounded-full bg-flow-50 px-3.5 py-1.5 text-xs font-medium text-flow-700">Ver PDF</span></td>
                     </tr>
                   ))}

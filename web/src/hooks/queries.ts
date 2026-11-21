@@ -11,6 +11,8 @@ import {
   productsService,
   quotesService,
 } from '@/services'
+import { projectService } from '@/services/project.service'
+import { searchService } from '@/services/search.service'
 import type { AiSettings, LeadFilters, LeadStatus, NotificationKind, Paginated, Lead, QuoteStatus, ApiQuoteStatus } from '@/types/domain'
 
 /** Claves de caché centralizadas. */
@@ -105,8 +107,12 @@ export function useUpdateLeadStatus() {
 }
 
 /* Conversaciones e IA */
-export const useConversations = (params: { search?: string; channel?: string; leadId?: string }) =>
+export const useConversations = (params: { search?: string; channel?: string; leadId?: string; unread?: boolean }) =>
   useQuery({ queryKey: qk.conversations(params), queryFn: () => conversationsService.list(params), refetchInterval: 15_000 })
+
+/** Conversaciones con mensajes sin leer (globo del menú). */
+export const useConversationsUnread = () =>
+  useQuery({ queryKey: ['conversations', 'unread-count'], queryFn: conversationsService.unreadCount, refetchInterval: 30_000 })
 
 export const useMessages = (id?: string) =>
   useQuery({ queryKey: qk.messages(id ?? ''), queryFn: () => conversationsService.messages(id!), enabled: !!id, refetchInterval: 8_000 })
@@ -122,13 +128,35 @@ export function useSendMessage(id: string) {
   })
 }
 
+/** Plantillas de WhatsApp aprobadas (solo se piden con la ventana de 24 h cerrada). */
+export const useWhatsAppTemplates = (enabled: boolean) =>
+  useQuery({ queryKey: ['whatsapp-templates'], queryFn: conversationsService.templates, enabled, staleTime: 5 * 60_000, retry: false })
+
+export function useSendTemplate(id: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: (input: { name: string; language: string; parameters: string[] }) => conversationsService.sendTemplate(id, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: qk.messages(id) })
+      qc.invalidateQueries({ queryKey: ['conversations'] })
+    },
+  })
+}
+
 export function useMarkRead() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: conversationsService.markRead,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['conversations'] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['conversations'] })
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    },
   })
 }
+
+/** Insight de IA de un lead: se pide bajo demanda (consume cuota de IA). */
+export const useLeadInsight = (leadId: string, enabled: boolean) =>
+  useQuery({ queryKey: ['lead-insight', leadId], queryFn: () => conversationsService.insight(leadId), enabled, staleTime: 10 * 60_000, retry: false })
 
 export function useToggleConversationAi() {
   const qc = useQueryClient()
@@ -272,6 +300,9 @@ export function useDeleteNote() {
 /* Notificaciones */
 export const useNotifications = (kind: NotificationKind | '' = '') =>
   useQuery({ queryKey: qk.notifications(kind), queryFn: () => notificationsService.list({ kind }), refetchInterval: 30_000 })
+/** No leídas (campana). Clave bajo 'notifications' para que se invalide junto con la lista. */
+export const useNotificationsUnread = () =>
+  useQuery({ queryKey: ['notifications', '__unread'], queryFn: notificationsService.unreadCount, refetchInterval: 30_000 })
 export function useMarkAllNotificationsRead() {
   const qc = useQueryClient()
   return useMutation({ mutationFn: notificationsService.markAllRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
@@ -279,4 +310,31 @@ export function useMarkAllNotificationsRead() {
 export function useMarkNotificationRead() {
   const qc = useQueryClient()
   return useMutation({ mutationFn: notificationsService.markRead, onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }) })
+}
+
+/* Búsqueda global (barra superior) */
+export const useGlobalSearch = (q: string) =>
+  useQuery({
+    queryKey: ['search', q],
+    queryFn: () => searchService.search(q),
+    enabled: q.trim().length >= 2,
+    staleTime: 30_000,
+    placeholderData: keepPreviousData,
+  })
+
+/* Empresa (Configuración → Empresa y Usuarios) */
+export const useProjectDetail = () => useQuery({ queryKey: ['project-detail'], queryFn: projectService.get })
+export function useUpdateProject() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: projectService.update, onSuccess: (data) => qc.setQueryData(['project-detail'], data) })
+}
+export const useInvitations = (enabled: boolean) =>
+  useQuery({ queryKey: ['invitations'], queryFn: projectService.invitations, enabled, retry: false })
+export function useInvite() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: projectService.invite, onSuccess: () => qc.invalidateQueries({ queryKey: ['invitations'] }) })
+}
+export function useRevokeInvitation() {
+  const qc = useQueryClient()
+  return useMutation({ mutationFn: projectService.revokeInvitation, onSuccess: () => qc.invalidateQueries({ queryKey: ['invitations'] }) })
 }

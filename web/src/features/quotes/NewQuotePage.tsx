@@ -1,62 +1,108 @@
-import { useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { Button, Card, CardHeader, Field, IconButton, Input, Segmented, Select, Textarea } from '@/components/ui'
 import { useToast } from '@/app/toast'
-import { useCreateAiQuote, useCreateQuote, useCustomers, useProducts } from '@/hooks/queries'
+import { useCreateAiQuote, useCreateQuote, useProducts, useQuoteLeads, useQuoteSettings } from '@/hooks/queries'
 import { moneyExact } from '@/lib/format'
-import { IVA_RATE, ivaBreakdown } from '@/lib/tax'
+import { DEFAULT_TAX_PERCENT, lineAmounts, quoteTotals } from '@/lib/tax'
 import type { QuoteStatus } from '@/types/domain'
 
-interface Line { key: number; productId: string; description: string; quantity: number; unitPrice: number }
+interface Line { key: number; productId: string; quantity: number; discountPercent: number }
 
-const inThirtyDays = () => new Date(Date.now() + 30 * 86_400_000).toISOString().slice(0, 10)
-const defaultConditions = '50% anticipo y 50% contra entrega.'
+const inDays = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)
 const th = 'px-2 py-2 text-left text-[11px] font-semibold tracking-wider text-navy-300 uppercase'
+const newLine = (): Line => ({ key: Date.now() + Math.random(), productId: '', quantity: 1, discountPercent: 0 })
 
+/**
+ * Nueva cotización. La API exige un lead (el cliente sale del lead si lo tiene)
+ * y partidas del catálogo: el precio no se envía, solo producto, cantidad y descuento %.
+ * Los precios son antes de IVA; el IVA (% de la empresa) se suma al final.
+ * Query params opcionales: ?lead=<id> preselecciona el lead; ?cliente=<id> filtra los leads de ese cliente.
+ */
 export function NewQuotePage() {
   const navigate = useNavigate()
   const toast = useToast()
-  const customers = useCustomers({ pageSize: 100 })
+  const [params] = useSearchParams()
+  const clientFilter = params.get('cliente') ?? undefined
+  const leads = useQuoteLeads({ clientId: clientFilter })
   const products = useProducts({ active: true })
+  const settings = useQuoteSettings()
   const create = useCreateQuote()
   const aiCreate = useCreateAiQuote()
 
   const [mode, setMode] = useState<'manual' | 'ia'>('manual')
-  const [customerId, setCustomerId] = useState('')
-  const [validUntil, setValidUntil] = useState(inThirtyDays())
-  const [discount, setDiscount] = useState(0)
+  const [leadId, setLeadId] = useState(params.get('lead') ?? '')
+  const [validUntil, setValidUntil] = useState(inDays(30))
+  const [adjustment, setAdjustment] = useState(0)
   const [notes, setNotes] = useState('')
-  const [conditions, setConditions] = useState(defaultConditions)
+  const [conditions, setConditions] = useState('')
+  const [touched, setTouched] = useState({ validUntil: false, conditions: false })
   const [prompt, setPrompt] = useState('')
-  const [lines, setLines] = useState<Line[]>([{ key: 1, productId: '', description: '', quantity: 1, unitPrice: 0 }])
+  const [lines, setLines] = useState<Line[]>([newLine()])
 
-  const customer = customers.data?.data.find((c) => c.id === customerId)
-  const gross = lines.reduce((a, l) => a + l.quantity * l.unitPrice, 0)
-  const { base, iva, total } = ivaBreakdown(gross, discount)
+  // Defaults de la empresa (vigencia y condiciones) mientras el usuario no los toque.
+  useEffect(() => {
+    const s = settings.data
+    if (!s) return
+    if (!touched.validUntil) setValidUntil(inDays(s.validityDays || 30))
+    if (!touched.conditions && s.defaultTerms) setConditions(s.defaultTerms)
+  }, [settings.data])
+
+  // Si se llegó desde un cliente con un único lead, se preselecciona.
+  useEffect(() => {
+    if (!leadId && clientFilter && leads.data?.length === 1) setLeadId(leads.data[0].id)
+  }, [leads.data, clientFilter, leadId])
+
+  const lead = leads.data?.find((l) => l.id === leadId)
+  const productById = useMemo(() => new Map((products.data ?? []).map((p) => [p.id, p])), [products.data])
+  const taxPercent = settings.data?.taxPercent ?? DEFAULT_TAX_PERCENT
+  const priced = lines.map((l) => ({ ...l, unitPrice: productById.get(l.productId)?.unitPrice ?? 0 }))
+  const totals = quoteTotals(priced.filter((l) => l.productId), taxPercent, adjustment)
 
   const patch = (key: number, p: Partial<Line>) => setLines((ls) => ls.map((l) => (l.key === key ? { ...l, ...p } : l)))
-  const pickProduct = (key: number, productId: string) => {
-    const p = products.data?.find((x) => x.id === productId)
-    patch(key, p ? { productId, description: p.name, unitPrice: p.unitPrice } : { productId: '' })
-  }
 
   const save = (status: QuoteStatus) => {
-    const items = lines.filter((l) => l.description.trim() && l.quantity > 0).map(({ productId, description, quantity, unitPrice }) => ({ productId: productId || null, description, quantity, unitPrice }))
-    if (!customerId) return toast.error('Selecciona un cliente')
-    if (items.length === 0) return toast.error('Agrega al menos un concepto')
-    create.mutate({ customerId, validUntil, discount, conditions, notes, items, status }, {
-      onSuccess: (q) => { toast.success(`Cotización ${q.folio} guardada`); navigate(`/cotizaciones/${q.id}`) },
-      onError: (err) => toast.error(err.message),
-    })
+    if (!leadId) return toast.error('Selecciona un lead')
+    const items = lines.filter((l) => l.productId && l.quantity > 0)
+    if (items.length === 0) return toast.error('Agrega al menos un producto o servicio del catálogo')
+    for (const l of items) {
+      const p = productById.get(l.productId)
+      const max = p?.maxDiscountPercent ?? 0
+      if (l.discountPercent > max) return toast.error(`El descuento de «${p?.name ?? 'producto'}» no puede superar ${max}%`)
+    }
+    if (adjustment > totals.maxAdjustment) return toast.error('El ajuste comercial no puede superar el subtotal menos descuentos')
+    create.mutate(
+      {
+        leadId,
+        validUntil,
+        discount: adjustment,
+        conditions,
+        notes,
+        status,
+        items: items.map(({ productId, quantity, discountPercent }) => ({ productId, quantity, discountPercent })),
+      },
+      {
+        onSuccess: (q) => {
+          if (status === 'pendiente' && q.apiStatus === 'DRAFT') toast.error(`Cotización ${q.folio} guardada como borrador: no se pudo enviar a aprobación`)
+          else toast.success(status === 'pendiente' ? `Cotización ${q.folio} enviada a aprobación` : `Borrador ${q.folio} guardado`)
+          navigate(`/cotizaciones/${q.id}`)
+        },
+        onError: (err) => toast.error(err.message),
+      },
+    )
   }
 
   const submit = (e: FormEvent) => {
     e.preventDefault()
     if (mode === 'ia') {
-      if (!customerId) return toast.error('Selecciona un cliente')
-      aiCreate.mutate({ customerId, prompt: prompt.trim() || undefined }, {
-        onSuccess: (q) => { toast.success(`Borrador ${q.folio} preparado por IA`); navigate(`/cotizaciones/${q.id}`) },
+      if (!leadId) return toast.error('Selecciona un lead')
+      aiCreate.mutate({ leadId, prompt }, {
+        onSuccess: (r) => {
+          toast.success(`Borrador ${r.folio} preparado por IA`)
+          r.warnings.forEach((w) => toast.error(`Ajuste de la IA: ${w}`))
+          navigate(`/cotizaciones/${r.id}`)
+        },
         onError: (err) => toast.error(err.message),
       })
       return
@@ -70,7 +116,7 @@ export function NewQuotePage() {
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-[26px] leading-tight font-semibold">Nueva cotización</h1>
-          <p className="mt-1 text-sm text-navy-400">{customer ? `${customer.name} · ${customer.contactName}` : 'Selecciona un cliente para comenzar.'}</p>
+          <p className="mt-1 text-sm text-navy-400">{lead ? `${lead.name}${lead.company ? ` · ${lead.company}` : ''}` : 'Selecciona un lead para comenzar.'}</p>
         </div>
         <Segmented value={mode} onChange={setMode} options={[{ value: 'manual', label: 'Crear manualmente' }, { value: 'ia', label: 'Generar con IA' }]} />
       </div>
@@ -78,17 +124,17 @@ export function NewQuotePage() {
       <div className="grid gap-4 xl:grid-cols-[1fr_320px]">
         <div className="space-y-4">
           <Card className="pb-5">
-            <CardHeader title="Datos del cliente" />
+            <CardHeader title="Lead y cliente" />
             <div className="grid gap-4 px-5 pt-4 sm:grid-cols-2">
-              <Field label="Cliente">
-                <Select value={customerId} onChange={(e) => setCustomerId(e.target.value)} required>
-                  <option value="">Selecciona un cliente</option>
-                  {customers.data?.data.map((c) => <option key={c.id} value={c.id}>{c.contactName}</option>)}
+              <Field label="Lead" hint="Toda cotización pertenece a un lead del embudo.">
+                <Select value={leadId} onChange={(e) => setLeadId(e.target.value)} required>
+                  <option value="">{leads.isLoading ? 'Cargando leads…' : 'Selecciona un lead'}</option>
+                  {leads.data?.map((l) => <option key={l.id} value={l.id}>{l.name}{l.company ? ` · ${l.company}` : ''}</option>)}
                 </Select>
               </Field>
-              <Field label="Empresa"><Input readOnly value={customer?.name ?? ''} placeholder="—" /></Field>
-              <Field label="Email"><Input readOnly value={customer?.email ?? ''} placeholder="—" /></Field>
-              <Field label="Teléfono"><Input readOnly value={customer?.phone ?? ''} placeholder="—" className="num" /></Field>
+              <Field label="Cliente" hint={lead && !lead.clientId ? 'El lead aún no está convertido en cliente.' : undefined}><Input readOnly value={lead?.clientName ?? ''} placeholder="—" /></Field>
+              <Field label="Email"><Input readOnly value={lead?.email ?? ''} placeholder="—" /></Field>
+              <Field label="Teléfono"><Input readOnly value={lead?.phone ?? ''} placeholder="—" className="num" /></Field>
             </div>
           </Card>
 
@@ -96,8 +142,8 @@ export function NewQuotePage() {
             <Card className="pb-5">
               <CardHeader title={<span className="flex items-center gap-2"><Sparkles className="size-4 text-teal-500" /> Preparar con IA</span>} />
               <div className="space-y-4 px-5 pt-4">
-                <p className="rounded-xl bg-teal-50 px-4 py-3 text-[13px] text-teal-700">El asistente elige conceptos y precios del catálogo. Podrás revisar y editar todo antes de aprobar y enviar.</p>
-                <Field label="Indicaciones (opcional)"><Textarea rows={4} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ej.: 12 usuarios, integración con WhatsApp y capacitación para el equipo." /></Field>
+                <p className="rounded-xl bg-teal-50 px-4 py-3 text-[13px] text-teal-700">El asistente elige productos y precios del catálogo activo según el lead y su conversación. Queda en borrador para que la revises antes de enviarla a aprobación.</p>
+                <Field label="Indicaciones (opcional)"><Textarea rows={4} maxLength={1000} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="Ej.: 12 usuarios, integración con WhatsApp y capacitación para el equipo." /></Field>
               </div>
             </Card>
           ) : (
@@ -105,27 +151,34 @@ export function NewQuotePage() {
               <Card className="pb-5">
                 <CardHeader title="Productos y servicios" />
                 <div className="scroll-thin overflow-x-auto px-5 pt-3">
-                  <table className="w-full min-w-[640px] text-[13px]">
-                    <thead><tr><th className={th}>Producto / servicio</th><th className={`${th} w-20`}>Cant.</th><th className={`${th} w-32`}>P. unitario</th><th className={`${th} w-32 text-right`}>Importe</th><th className="w-10" /></tr></thead>
+                  <table className="w-full min-w-[700px] text-[13px]">
+                    <thead><tr><th className={th}>Producto / servicio</th><th className={`${th} w-20`}>Cant.</th><th className={`${th} w-28 text-right`}>P. unitario</th><th className={`${th} w-24`}>Desc. %</th><th className={`${th} w-32 text-right`}>Importe</th><th className="w-10" /></tr></thead>
                     <tbody className="divide-y divide-navy-100/60">
-                      {lines.map((l) => (
-                        <tr key={l.key}>
-                          <td className="px-2 py-2.5">
-                            <Select value={l.productId} onChange={(e) => pickProduct(l.key, e.target.value)}>
-                              <option value="">Concepto personalizado</option>
-                              {products.data?.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
-                            </Select>
-                            {!l.productId && <Input className="mt-2" value={l.description} onChange={(e) => patch(l.key, { description: e.target.value })} placeholder="Descripción del concepto" />}
-                          </td>
-                          <td className="px-2 py-2.5 align-top"><Input type="number" min={1} value={l.quantity} onChange={(e) => patch(l.key, { quantity: Number(e.target.value) })} className="num" /></td>
-                          <td className="px-2 py-2.5 align-top"><Input type="number" min={0} step="0.01" value={l.unitPrice} onChange={(e) => patch(l.key, { unitPrice: Number(e.target.value) })} className="num" /></td>
-                          <td className="num px-2 py-2.5 text-right align-top leading-10 font-medium">{moneyExact(l.quantity * l.unitPrice)}</td>
-                          <td className="py-2.5 align-top"><IconButton type="button" aria-label="Quitar concepto" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} className="hover:bg-red-50 hover:text-red-500"><Trash2 className="size-4" /></IconButton></td>
-                        </tr>
-                      ))}
+                      {priced.map((l) => {
+                        const p = productById.get(l.productId)
+                        const max = p?.maxDiscountPercent ?? 0
+                        return (
+                          <tr key={l.key}>
+                            <td className="px-2 py-2.5">
+                              <Select value={l.productId} onChange={(e) => patch(l.key, { productId: e.target.value, discountPercent: 0 })}>
+                                <option value="">{products.isLoading ? 'Cargando catálogo…' : 'Selecciona del catálogo'}</option>
+                                {products.data?.map((x) => <option key={x.id} value={x.id}>{x.name}{x.unit ? ` (${x.unit})` : ''}</option>)}
+                              </Select>
+                            </td>
+                            <td className="px-2 py-2.5 align-top"><Input type="number" min={0.01} step="0.01" value={l.quantity} onChange={(e) => patch(l.key, { quantity: Number(e.target.value) })} className="num" /></td>
+                            <td className="num px-2 py-2.5 text-right align-top leading-10">{moneyExact(l.unitPrice)}</td>
+                            <td className="px-2 py-2.5 align-top">
+                              <Input type="number" min={0} max={max} step="0.01" value={l.discountPercent} disabled={!p || max === 0} title={p && max === 0 ? 'Este producto no admite descuento' : `Máximo ${max}%`} onChange={(e) => patch(l.key, { discountPercent: Number(e.target.value) })} className="num" />
+                            </td>
+                            <td className="num px-2 py-2.5 text-right align-top leading-10 font-medium">{moneyExact(lineAmounts(l).lineTotal)}</td>
+                            <td className="py-2.5 align-top"><IconButton type="button" aria-label="Quitar concepto" onClick={() => setLines((ls) => (ls.length > 1 ? ls.filter((x) => x.key !== l.key) : ls))} className="hover:bg-red-50 hover:text-red-500"><Trash2 className="size-4" /></IconButton></td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
-                  <Button type="button" size="sm" variant="ghost" className="mt-2 text-flow-600" icon={<Plus className="size-3.5" />} onClick={() => setLines((ls) => [...ls, { key: Date.now(), productId: '', description: '', quantity: 1, unitPrice: 0 }])}>Agregar producto / servicio</Button>
+                  {!products.isLoading && !products.data?.length && <p className="px-2 pt-3 text-xs text-navy-400">No hay productos activos en el catálogo. Agrégalos en Productos y Servicios.</p>}
+                  <Button type="button" size="sm" variant="ghost" className="mt-2 text-flow-600" icon={<Plus className="size-3.5" />} onClick={() => setLines((ls) => [...ls, newLine()])}>Agregar producto / servicio</Button>
                 </div>
               </Card>
 
@@ -134,8 +187,8 @@ export function NewQuotePage() {
                 <div className="space-y-4 px-5 pt-4">
                   <Field label="Notas para el cliente"><Textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Mensaje que verá el cliente en la cotización." /></Field>
                   <div className="grid gap-4 sm:grid-cols-2">
-                    <Field label="Condiciones comerciales"><Textarea rows={2} value={conditions} onChange={(e) => setConditions(e.target.value)} /></Field>
-                    <Field label="Válida hasta"><Input type="date" value={validUntil} onChange={(e) => setValidUntil(e.target.value)} required /></Field>
+                    <Field label="Condiciones comerciales"><Textarea rows={2} value={conditions} onChange={(e) => { setConditions(e.target.value); setTouched((t) => ({ ...t, conditions: true })) }} /></Field>
+                    <Field label="Válida hasta"><Input type="date" min={inDays(1)} value={validUntil} onChange={(e) => { setValidUntil(e.target.value); setTouched((t) => ({ ...t, validUntil: true })) }} required /></Field>
                   </div>
                 </div>
               </Card>
@@ -145,18 +198,22 @@ export function NewQuotePage() {
 
         <Card className="h-fit p-5 xl:sticky xl:top-0">
           <h3 className="font-display text-[15px] font-semibold">Resumen</h3>
-          <dl className="mt-4 space-y-3 text-[13px]">
-            <div className="flex justify-between"><dt className="text-navy-400">Subtotal</dt><dd className="num font-medium">{moneyExact(base)}</dd></div>
-            <div className="flex items-center justify-between gap-3"><dt className="text-navy-400">Descuento</dt><dd><Input type="number" min={0} value={discount} onChange={(e) => setDiscount(Number(e.target.value))} className="num h-9 w-28 text-right" /></dd></div>
-            <div className="flex justify-between"><dt className="text-navy-400">IVA ({IVA_RATE * 100}%)</dt><dd className="num font-medium">{moneyExact(iva)}</dd></div>
-            <div className="flex items-baseline justify-between border-t border-navy-100/70 pt-4"><dt className="font-semibold">TOTAL</dt><dd className="num text-2xl font-semibold text-teal-600">{moneyExact(total)}</dd></div>
-          </dl>
+          {mode === 'manual' && (
+            <dl className="mt-4 space-y-3 text-[13px]">
+              <div className="flex justify-between"><dt className="text-navy-400">Subtotal</dt><dd className="num font-medium">{moneyExact(totals.subtotal)}</dd></div>
+              {totals.discount > 0 && <div className="flex justify-between"><dt className="text-navy-400">Descuentos por partida</dt><dd className="num font-medium">− {moneyExact(totals.discount)}</dd></div>}
+              <div className="flex items-center justify-between gap-3"><dt className="text-navy-400">Ajuste comercial (Q)</dt><dd><Input type="number" min={0} step="0.01" value={adjustment} onChange={(e) => setAdjustment(Math.max(0, Number(e.target.value)))} className="num h-9 w-28 text-right" /></dd></div>
+              <div className="flex justify-between"><dt className="text-navy-400">IVA ({taxPercent}%)</dt><dd className="num font-medium">{moneyExact(totals.tax)}</dd></div>
+              <div className="flex items-baseline justify-between border-t border-navy-100/70 pt-4"><dt className="font-semibold">TOTAL</dt><dd className="num text-2xl font-semibold text-teal-600">{moneyExact(totals.total)}</dd></div>
+              <p className="text-[11px] text-navy-300">Precios del catálogo antes de IVA. Los importes finales los confirma el servidor al guardar.</p>
+            </dl>
+          )}
           <div className="mt-5 space-y-2">
             {mode === 'ia' ? (
               <Button type="submit" variant="success" className="w-full" loading={aiCreate.isPending} icon={<Sparkles className="size-4" />}>Generar borrador</Button>
             ) : (
               <>
-                <Button type="submit" className="w-full" loading={create.isPending}>Guardar cotización</Button>
+                <Button type="submit" className="w-full" loading={create.isPending}>Enviar a aprobación</Button>
                 <Button type="button" variant="secondary" className="w-full" onClick={() => save('borrador')} disabled={create.isPending}>Guardar borrador</Button>
               </>
             )}

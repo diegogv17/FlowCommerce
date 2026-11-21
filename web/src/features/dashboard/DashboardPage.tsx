@@ -1,9 +1,9 @@
 import { Link, useNavigate } from 'react-router-dom'
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { ArrowDownRight, ArrowUpRight, CalendarClock, CheckCircle2, FileText, Mail, MessageCircle, Phone, Plus, TrendingUp, Users, Video, Wallet, type LucideIcon } from 'lucide-react'
+import { ArrowDownRight, ArrowUpRight, CalendarClock, CheckCircle2, ClipboardCheck, FileText, Mail, MessageCircle, Phone, Plus, TrendingUp, Users, Video, Wallet, type LucideIcon } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useAuth } from '@/app/auth'
-import { Badge, Button, Card, CardHeader, ErrorState, Skeleton } from '@/components/ui'
+import { Badge, Button, Card, CardHeader, EmptyState, ErrorState, Skeleton } from '@/components/ui'
 import { useDashboard } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { compactMoney, money, relativeTime } from '@/lib/format'
@@ -24,7 +24,19 @@ const kpiTone: Record<string, string> = {
   orange: 'bg-orange-50 text-orange-600',
 }
 
-function KpiCard({ icon, tone, label, value, delta, suffix = '%', mono, className }: { icon: ReactNode; tone: Tone; label: string; value: string; delta: number; suffix?: string; mono?: boolean; className?: string }) {
+function KpiCard({ icon, tone, label, value, delta, hint, suffix = '%', mono, className }: { icon: ReactNode; tone: Tone; label: string; value: string; delta: number | null; hint?: string; suffix?: string; mono?: boolean; className?: string }) {
+  if (delta === null) {
+    return (
+      <Card className={cn('p-4', className)}>
+        <div className="mb-3 flex items-center gap-2.5">
+          <span className={cn('grid size-8 shrink-0 place-items-center rounded-full', kpiTone[tone])}>{icon}</span>
+          <span className="text-xs font-medium text-navy-500">{label}</span>
+        </div>
+        <p className={cn('font-display text-[30px] leading-none font-semibold', mono && 'num')}>{value}</p>
+        <p className="mt-2.5 text-xs text-navy-300">{hint ?? '\u00a0'}</p>
+      </Card>
+    )
+  }
   const positive = delta >= 0
   return (
     <Card className={cn('p-4', className)}>
@@ -37,7 +49,7 @@ function KpiCard({ icon, tone, label, value, delta, suffix = '%', mono, classNam
         {positive ? <ArrowUpRight className="size-3.5" /> : <ArrowDownRight className="size-3.5" />}
         {positive ? '+' : '−'}
         {Math.abs(delta)}
-        {suffix} <span className="font-normal text-navy-300">vs mes anterior</span>
+        {suffix} <span className="font-normal text-navy-300">vs mes anterior{hint ? ` · ${hint}` : ''}</span>
       </p>
     </Card>
   )
@@ -48,6 +60,7 @@ const typeMeta: Record<DashboardSummary['todayFollowUps'][number]['type'], { lab
   reunion: { label: 'Reunión', icon: Video },
   whatsapp: { label: 'WhatsApp', icon: MessageCircle },
   correo: { label: 'Correo', icon: Mail },
+  tarea: { label: 'Tarea', icon: ClipboardCheck },
 }
 
 const followTone: Record<DashboardSummary['todayFollowUps'][number]['status'], { label: string; tone: Tone }> = {
@@ -96,6 +109,11 @@ export function DashboardPage() {
   const maxStatus = Math.max(...data.leadsByStatus.map((s) => s.count), 1)
   const quotesTotal = data.quotesByStatus.reduce((a, b) => a + b.count, 0)
   const pending = data.todayFollowUps.filter((f) => f.status === 'pendiente').length
+  const showFollowUps = data.sections?.followUps !== false
+  const showActivity = data.sections?.activity !== false
+  const hasGoals = data.salesByPeriod.some((p) => p.goal !== undefined)
+  const maxConversion = Math.max(10, ...data.monthlyConversion.map((m) => Math.ceil(m.value * 1.2)))
+  const convDelta = k.conversion.delta
   const quoteColor: Record<string, string> = { borrador: '#8b5cf6', pendiente: '#f59e0b', enviada: '#3b82f6', aprobada: '#10b981', rechazada: '#ef4444' }
 
   return (
@@ -103,12 +121,12 @@ export function DashboardPage() {
       {header}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
-        <KpiCard icon={<Users className="size-4" />} tone="blue" label="Leads activos" value={String(k.activeLeads.value)} delta={k.activeLeads.delta} />
-        <KpiCard icon={<CalendarClock className="size-4" />} tone="amber" label="Seguimientos pendientes" value={String(k.pendingFollowUps.value)} delta={k.pendingFollowUps.delta} suffix="" />
-        <KpiCard icon={<FileText className="size-4" />} tone="violet" label="Cotizaciones enviadas" value={String(k.sentQuotes.value)} delta={k.sentQuotes.delta} />
-        <KpiCard icon={<CheckCircle2 className="size-4" />} tone="green" label="Ventas ganadas" value={String(k.wonSales.value)} delta={k.wonSales.delta} suffix="" />
-        <KpiCard icon={<TrendingUp className="size-4" />} tone="cyan" label="Conversión" value={`${k.conversion.value}%`} delta={k.conversion.delta} suffix=" pts" />
-        <KpiCard icon={<Wallet className="size-4" />} tone="orange" label="Pipeline estimado" value={money(k.estimatedPipeline.value)} delta={k.estimatedPipeline.delta} mono className="sm:col-span-2 xl:col-span-1" />
+        <KpiCard icon={<Users className="size-4" />} tone="blue" label="Leads activos" value={String(k.activeLeads.value)} delta={k.activeLeads.delta} hint={k.activeLeads.hint} />
+        <KpiCard icon={<CalendarClock className="size-4" />} tone="amber" label="Seguimientos pendientes" value={String(k.pendingFollowUps.value)} delta={k.pendingFollowUps.delta} hint={k.pendingFollowUps.hint} suffix="" />
+        <KpiCard icon={<FileText className="size-4" />} tone="violet" label="Cotizaciones enviadas" value={String(k.sentQuotes.value)} delta={k.sentQuotes.delta} hint={k.sentQuotes.hint} />
+        <KpiCard icon={<CheckCircle2 className="size-4" />} tone="green" label="Ventas ganadas" value={String(k.wonSales.value)} delta={k.wonSales.delta} hint={k.wonSales.hint} suffix="" />
+        <KpiCard icon={<TrendingUp className="size-4" />} tone="cyan" label="Conversión" value={`${k.conversion.value}%`} delta={k.conversion.delta} hint={k.conversion.hint} suffix=" pts" />
+        <KpiCard icon={<Wallet className="size-4" />} tone="orange" label="Pipeline estimado" value={money(k.estimatedPipeline.value)} delta={k.estimatedPipeline.delta} hint={k.estimatedPipeline.hint} mono className="sm:col-span-2 xl:col-span-1" />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -131,13 +149,13 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Conversión mensual" action={<Badge tone="green">+{k.conversion.delta} pts</Badge>} />
+          <CardHeader title="Conversión mensual" action={convDelta !== null ? <Badge tone={convDelta >= 0 ? 'green' : 'red'}>{convDelta >= 0 ? '+' : '−'}{Math.abs(convDelta)} pts</Badge> : undefined} />
           <p className="num px-5 pt-3 font-display text-[30px] font-semibold">{k.conversion.value}%</p>
           <div className="h-44 px-3 pb-4">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data.monthlyConversion} margin={{ top: 8, right: 8, left: 8, bottom: 0 }}>
                 <XAxis dataKey="label" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} />
-                <YAxis hide domain={[0, 36]} />
+                <YAxis hide domain={[0, maxConversion]} />
                 <Tooltip cursor={{ fill: '#f1f5f9' }} formatter={(v) => [`${v}%`, 'Conversión']} contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
                 <Bar dataKey="value" radius={[6, 6, 0, 0]}>
                   {data.monthlyConversion.map((_, i) => <Cell key={i} fill={i === data.monthlyConversion.length - 1 ? '#10b981' : '#3b82f6'} />)}
@@ -148,7 +166,8 @@ export function DashboardPage() {
         </Card>
 
         <Card>
-          <CardHeader title="Cotizaciones por estado" />
+          <CardHeader title="Cotizaciones por estado" action={<span className="text-xs text-navy-300">Últimos 8 meses</span>} />
+          {quotesTotal === 0 ? <EmptyState title="Sin cotizaciones" text="Aún no hay cotizaciones en este período." /> : (
           <div className="flex items-center gap-5 px-5 py-5">
             <div className="relative size-36 shrink-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -175,11 +194,12 @@ export function DashboardPage() {
               ))}
             </ul>
           </div>
+          )}
         </Card>
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Card className="pb-3 lg:col-span-1">
+        <Card className={cn('pb-3', showFollowUps ? 'lg:col-span-1' : 'lg:col-span-3')}>
           <CardHeader title="Ventas por período" action={<span className="text-xs text-navy-300">Últimos 8 meses</span>} />
           <p className="num px-5 pt-3 font-display text-[30px] font-semibold">{money(data.salesTotal)}</p>
           <div className="h-44 px-3">
@@ -196,18 +216,20 @@ export function DashboardPage() {
                 <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={compactMoney} width={48} />
                 <Tooltip formatter={(v, n) => [money(Number(v)), n === 'sales' ? 'Ventas' : 'Meta']} contentStyle={{ borderRadius: 12, border: '1px solid #e2e8f0', fontSize: 12 }} />
                 <Area type="monotone" dataKey="sales" stroke="#10b981" strokeWidth={2.5} fill="url(#salesFill)" />
-                <Line type="monotone" dataKey="goal" stroke="#475569" strokeDasharray="5 4" strokeWidth={1.5} dot={false} />
+                {hasGoals && <Line type="monotone" dataKey="goal" stroke="#475569" strokeDasharray="5 4" strokeWidth={1.5} dot={false} />}
               </AreaChart>
             </ResponsiveContainer>
           </div>
           <div className="flex gap-4 px-5 pt-2 pb-2 text-xs text-navy-400">
-            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-teal-500" /> Ventas</span>
-            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded border-t-2 border-dashed border-navy-500" /> Meta</span>
+            <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded bg-teal-500" /> Ventas (cotizaciones pagadas)</span>
+            {hasGoals && <span className="flex items-center gap-1.5"><span className="h-0.5 w-4 rounded border-t-2 border-dashed border-navy-500" /> Meta</span>}
           </div>
         </Card>
 
+        {showFollowUps && (
         <Card className="pb-2 lg:col-span-2">
           <CardHeader title="Seguimientos de hoy" action={<Badge tone="blue">{pending} pendientes</Badge>} />
+          {data.todayFollowUps.length === 0 ? <EmptyState title="Sin seguimientos para hoy" text="Programa uno desde un lead o en Notas." /> : (
           <div className="scroll-thin mt-3 overflow-x-auto">
             <table className="w-full min-w-[620px] text-[13px]">
               <thead>
@@ -221,7 +243,7 @@ export function DashboardPage() {
                   const st = followTone[f.status]
                   return (
                     <tr key={f.id} className="hover:bg-navy-50/50">
-                      <td className="px-5 py-3"><p className="font-semibold">{f.leadName}</p><p className="text-xs text-navy-400">{f.company}</p></td>
+                      <td className="px-5 py-3"><p className="font-semibold">{f.leadName}</p><p className="max-w-[260px] truncate text-xs text-navy-400">{f.title ?? f.company}</p></td>
                       <td className="num px-3 py-3 font-medium">{f.time}</td>
                       <td className="px-3 py-3"><span className="flex items-center gap-2 text-navy-600"><t.icon className="size-3.5 text-navy-400" />{t.label}</span></td>
                       <td className="px-3 py-3 text-navy-600">{f.ownerName}</td>
@@ -233,11 +255,15 @@ export function DashboardPage() {
               </tbody>
             </table>
           </div>
+          )}
         </Card>
+        )}
       </div>
 
+      {showActivity && (
       <Card className="mt-4 pb-3">
         <CardHeader title="Actividad reciente" />
+        {data.recentActivity.length === 0 ? <EmptyState title="Sin actividad todavía" text="Aquí verás los movimientos de leads, cotizaciones y mensajes." /> : (
         <ul className="mt-3 grid gap-x-8 px-5 md:grid-cols-2 xl:grid-cols-3">
           {data.recentActivity.map((a) => {
             const Icon = activityIcon[a.tone] ?? Plus
@@ -253,7 +279,9 @@ export function DashboardPage() {
             )
           })}
         </ul>
+        )}
       </Card>
+      )}
     </>
   )
 }

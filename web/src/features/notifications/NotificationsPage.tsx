@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { CalendarClock, CheckCheck, CircleCheck, FileText, MessageCircle, Sparkles, UserX, XCircle, type LucideIcon } from 'lucide-react'
 import { Badge, Button, Card, EmptyState, ErrorState, PageLoader, PageHeader } from '@/components/ui'
-import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications } from '@/hooks/queries'
+import { useMarkAllNotificationsRead, useMarkNotificationRead, useNotifications, useNotificationsUnread } from '@/hooks/queries'
 import { cn } from '@/lib/cn'
 import { relativeTime } from '@/lib/format'
 import type { AppNotification, NotificationKind } from '@/types/domain'
@@ -39,13 +39,15 @@ export function NotificationsPage() {
   const { data, isLoading, isError, refetch } = useNotifications(kind)
   const markAll = useMarkAllNotificationsRead()
   const markOne = useMarkNotificationRead()
-  const unread = (data ?? []).filter((n) => !n.read).length
+  const unreadCount = useNotificationsUnread()
+  // El total sin leer viene de la API (la lista solo trae las 100 más recientes de la pestaña).
+  const unread = unreadCount.data ?? (data ?? []).filter((n) => !n.read).length
 
   return (
     <>
       <PageHeader
         title="Notificaciones"
-        subtitle={`${unread} sin leer · ${data?.length ?? 0} en total`}
+        subtitle={`${unread} sin leer · ${data?.length ?? 0} ${kind ? 'en esta pestaña' : 'recientes'}`}
         actions={<Button variant="secondary" size="sm" icon={<CheckCheck className="size-4" />} onClick={() => markAll.mutate()} disabled={unread === 0}>Marcar todas como leídas</Button>}
       />
       <div className="mb-4 flex flex-wrap gap-2">
@@ -71,7 +73,7 @@ export function NotificationsPage() {
                     <p className="mt-1 text-[11px] text-navy-300">{relativeTime(n.createdAt)}</p>
                   </div>
                   {!n.read && <span className="size-2 shrink-0 rounded-full bg-teal-500" aria-label="Sin leer" />}
-                  <Button variant="secondary" size="sm" onClick={() => { markOne.mutate(n.id); navigate(n.href) }}>Ver detalle</Button>
+                  <Button variant="secondary" size="sm" onClick={() => { if (!n.read) markOne.mutate(n.id); navigate(n.href) }}>Ver detalle</Button>
                 </li>
               )
             })}
