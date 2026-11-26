@@ -36,7 +36,7 @@
     "web:build": "pnpm --filter @flowcommerce/web build"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.143",
+    "@ai-sdk/google": "^4.0.124",
     "@flowcommerce/types": "workspace:*",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
