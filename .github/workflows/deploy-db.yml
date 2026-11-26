@@ -48,7 +48,7 @@ jobs:
           echo "::error::production solo se migra desde main (rama actual: ${{ github.ref_name }})."
           exit 1
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
       - uses: actions/setup-node@v4
         with:
           node-version: '24'
