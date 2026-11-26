@@ -22,6 +22,7 @@ export const router = createBrowserRouter([
       { path: 'leads/:id', lazy: async () => ({ Component: (await import('@/features/leads/LeadDetailPage')).LeadDetailPage }) },
       { path: 'leads', lazy: async () => ({ Component: (await import('@/features/leads/LeadsPage')).LeadsPage }) },
       { path: 'conversaciones/:id?', lazy: async () => ({ Component: (await import('@/features/inbox/InboxPage')).InboxPage }) },
+      { path: 'asistente', lazy: async () => ({ Component: (await import('@/features/assistant/AssistantPage')).AssistantPage }) },
       { path: 'cotizaciones', lazy: async () => ({ Component: (await import('@/features/quotes/QuotesPage')).QuotesPage }) },
       { path: 'cotizaciones/nueva', lazy: async () => ({ Component: (await import('@/features/quotes/NewQuotePage')).NewQuotePage }) },
       { path: 'cotizaciones/:id', lazy: async () => ({ Component: (await import('@/features/quotes/QuoteDetailPage')).QuoteDetailPage }) },

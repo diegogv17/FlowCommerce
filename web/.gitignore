@@ -25,3 +25,8 @@ dist-ssr
 
 # Entorno local
 .env
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/

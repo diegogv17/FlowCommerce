@@ -60,8 +60,14 @@ export class LeadInsightResponseDto {
   @ApiProperty()
   nextBestAction!: string;
 
-  @ApiProperty({ minimum: 0, maximum: 100 })
-  closeProbability!: number;
+  @ApiProperty({
+    minimum: 0,
+    maximum: 100,
+    type: Number,
+    nullable: true,
+    description: 'null cuando no hay datos suficientes para estimarla',
+  })
+  closeProbability!: number | null;
 
   @ApiProperty({ type: [String] })
   risks!: string[];

@@ -51,7 +51,10 @@ export interface QuoteDraftResult {
   warnings: string[];
 }
 
-const clean = (text: string | undefined, max: number): string | undefined => {
+const clean = (
+  text: string | null | undefined,
+  max: number,
+): string | undefined => {
   const trimmed = text?.trim();
   return trimmed ? trimmed.slice(0, max) : undefined;
 };

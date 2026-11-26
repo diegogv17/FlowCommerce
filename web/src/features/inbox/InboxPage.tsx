@@ -154,7 +154,11 @@ function InsightCard({ leadId }: { leadId: string }) {
     <div className="space-y-2.5 rounded-xl border border-violet-100 bg-violet-50/40 p-3 text-[12.5px]">
       <div className="flex items-center justify-between">
         <p className="flex items-center gap-1.5 text-xs font-semibold text-violet-600"><Sparkles className="size-3.5" /> Insight de IA</p>
-        <Badge tone={data.closeProbability >= 60 ? 'green' : data.closeProbability >= 30 ? 'amber' : 'red'}>{Math.round(data.closeProbability)}% cierre</Badge>
+        {data.closeProbability === null ? (
+          <Badge tone="slate">Sin datos para estimar cierre</Badge>
+        ) : (
+          <Badge tone={data.closeProbability >= 60 ? 'green' : data.closeProbability >= 30 ? 'amber' : 'red'}>{Math.round(data.closeProbability)}% cierre</Badge>
+        )}
       </div>
       <p className="text-navy-700">{data.summary}</p>
       <div>

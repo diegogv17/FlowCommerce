@@ -38,7 +38,14 @@ La API debe estar corriendo (`pnpm start:dev` en la raíz, puerto 3000) con `COR
 ## Pantallas
 
 Cuenta: login, registro, onboarding (crear empresa), invitación, solicitar acceso, recuperar/restablecer contraseña, `/auth/callback`.
-App: Dashboard · Leads (tabla, pipeline y ficha) · Conversaciones de WhatsApp con sugerencias e insight de IA · Cotizaciones (manual o con IA, aprobación, PDF, envío por correo) · Clientes · Productos y servicios · Notas y seguimientos · Notificaciones · Configuración (perfil, usuarios e invitaciones, empresa, IA).
+App: Dashboard · Leads (tabla, pipeline y ficha) · Conversaciones de WhatsApp con sugerencias e insight de IA · Asistente de IA (chat) · Cotizaciones (manual o con IA, aprobación, PDF, envío por correo) · Clientes · Productos y servicios · Notas y seguimientos · Notificaciones · Configuración (perfil, usuarios e invitaciones, empresa, IA).
+
+## Asistente de IA (`/asistente`)
+
+- **Streaming:** `useChat` de `@ai-sdk/react` consume `POST /projects/:id/assistant/chat` (protocolo *UI message stream* del Vercel AI SDK v6) y pinta la respuesta mientras llega. El transporte está en `src/features/assistant/chat-transport.ts`.
+- **Herramientas:** el asistente consulta leads, clientes, cotizaciones, catálogo, métricas y seguimientos con los permisos del usuario; la pantalla muestra cada consulta.
+- **Aprobación:** la única acción que escribe (programar un seguimiento) muestra una tarjeta para aprobar o descartar; nada se guarda sin ese clic. La aprobación va firmada por la API.
+- **Pruebas:** `e2e/assistant.spec.ts` (Playwright) cubre la respuesta en streaming, la aprobación y el rechazo, con la API y Supabase sustituidos a nivel de red.
 
 ## Despliegue (Vercel)
 

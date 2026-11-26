@@ -3,7 +3,10 @@ import { tool, type ToolSet } from 'ai';
 import { z } from 'zod';
 import { ListClientsUseCase } from '../../clients/application/use-cases/list-clients.use-case';
 import { GetDashboardUseCase } from '../../dashboard/application/use-cases/get-dashboard.use-case';
-import { ListFollowUpsUseCase } from '../../follow-ups/application/use-cases/follow-ups.use-cases';
+import {
+  CreateFollowUpUseCase,
+  ListFollowUpsUseCase,
+} from '../../follow-ups/application/use-cases/follow-ups.use-cases';
 import { GetLeadContextForAiUseCase } from '../../integrations/application/ai-context.use-case';
 import { ListLeadsUseCase } from '../../leads/application/use-cases/list-leads.use-case';
 import { ListProductsUseCase } from '../../products/application/use-cases/list-products.use-case';
@@ -54,6 +57,45 @@ const parseDay = (value: string | undefined): Date | null => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
+const FOLLOW_UP_TYPES = [
+  'CALL',
+  'MEETING',
+  'EMAIL',
+  'WHATSAPP',
+  'TASK',
+] as const;
+const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+// Guatemala no usa horario de verano: siempre UTC-6.
+const GUATEMALA_UTC_OFFSET_HOURS = 6;
+
+// Convierte la fecha (AAAA-MM-DD) y la hora (HH:mm, 09:00 si no viene) que
+// propone el modelo, en hora de Guatemala, a un instante UTC. Rechaza fechas
+// imposibles (2026-02-30) y fechas en el pasado: el modelo no conoce la hora
+// del servidor y a veces propone "ayer".
+export function parseDueAtGuatemala(
+  fecha: string,
+  hora: string | null | undefined,
+  now: Date = new Date(),
+): Date | ToolError {
+  const day = parseDay(fecha);
+  if (!day || day.toISOString().slice(0, 10) !== fecha) {
+    return { error: 'Fecha inválida: usa el formato AAAA-MM-DD.' };
+  }
+  const time = TIME_RE.exec(hora?.trim() || '09:00');
+  if (!time) {
+    return { error: 'Hora inválida: usa el formato HH:mm (24 horas).' };
+  }
+  const dueAt = new Date(
+    day.getTime() +
+      (Number(time[1]) + GUATEMALA_UTC_OFFSET_HOURS) * 3_600_000 +
+      Number(time[2]) * 60_000,
+  );
+  if (dueAt.getTime() < now.getTime()) {
+    return { error: 'La fecha del seguimiento ya pasó: propone una futura.' };
+  }
+  return dueAt;
+}
+
 // Herramientas (tool calling) del chat. Cada una llama a un CASO DE USO
 // existente con el usuario de la sesión: assertCan y el filtro por projectId se
 // aplican igual que en las pantallas, así que el asistente nunca ve más de lo
@@ -70,6 +112,7 @@ export class AssistantChatTools {
     private readonly getDashboard: GetDashboardUseCase,
     private readonly listProducts: ListProductsUseCase,
     private readonly listFollowUps: ListFollowUpsUseCase,
+    private readonly createFollowUp: CreateFollowUpUseCase,
   ) {}
 
   build(actor: Actor): ToolSet {
@@ -294,6 +337,64 @@ export class AssistantChatTools {
               total: page.total,
               seguimientos: page.followUps.map(followUpForPrompt),
             };
+          }),
+      }),
+
+      // ÚNICA herramienta que ESCRIBE en la base. needsApproval: el SDK no
+      // ejecuta "execute" hasta que el usuario aprueba en el chat; la
+      // solicitud va firmada (HMAC) y se verifica al volver del navegador.
+      crear_seguimiento: tool({
+        description:
+          'Programa un seguimiento (llamada, reunión, correo, WhatsApp o tarea) para un lead. Requiere el id del lead (obtenlo con buscar_leads) y SIEMPRE la aprobación del usuario antes de guardarse. Úsala solo si el usuario pidió agendar o programar algo.',
+        inputSchema: z.object({
+          leadId: z.string().describe('id (uuid) del lead, de buscar_leads'),
+          tipo: z.enum(FOLLOW_UP_TYPES).describe('Tipo de seguimiento'),
+          titulo: z
+            .string()
+            .describe(
+              'Título corto y concreto, p. ej. "Llamar para confirmar pedido"',
+            ),
+          fecha: z
+            .string()
+            .describe('Fecha AAAA-MM-DD en hora de Guatemala, hoy o futura'),
+          hora: z
+            .string()
+            .nullable()
+            .describe(
+              'Hora HH:mm (24 h) en hora de Guatemala; null si el usuario no dio hora',
+            ),
+          notas: z
+            .string()
+            .nullable()
+            .describe(
+              'Detalle adicional que dio el usuario; null si no dio ninguno',
+            ),
+        }),
+        needsApproval: true,
+        execute: ({ leadId, tipo, titulo, fecha, hora, notas }) =>
+          this.safe('crear_seguimiento', async () => {
+            if (!UUID_RE.test(leadId)) {
+              return {
+                error: 'Id de lead inválido: búscalo primero con buscar_leads.',
+              };
+            }
+            const title = titulo.trim().slice(0, 200);
+            if (!title) {
+              return { error: 'El seguimiento necesita un título.' };
+            }
+            const dueAt = parseDueAtGuatemala(fecha, hora);
+            if ('error' in dueAt) {
+              return dueAt;
+            }
+            const created = await this.createFollowUp.execute({
+              ...actor,
+              leadId,
+              type: tipo,
+              title,
+              notes: notas?.trim().slice(0, 2000) || null,
+              dueAt,
+            });
+            return { creado: true, seguimiento: followUpForPrompt(created) };
           }),
       }),
     };

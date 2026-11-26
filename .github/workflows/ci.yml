@@ -136,3 +136,38 @@ jobs:
         run: pnpm --filter @flowcommerce/web lint
       - name: Tipos + build
         run: pnpm --filter @flowcommerce/web build
+
+  web-e2e:
+    name: Web · E2E del asistente (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Instalar dependencias
+        run: pnpm install --frozen-lockfile
+
+      # Solo Chromium (con sus librerías del sistema): es el navegador que
+      # usa playwright.config.ts.
+      - name: Instalar Chromium para Playwright
+        run: pnpm --filter @flowcommerce/web exec playwright install --with-deps chromium
+
+      # La API, Supabase y Gemini se sustituyen a nivel de red dentro de la
+      # prueba: no necesita secretos ni servicios externos.
+      - name: Pruebas E2E
+        run: pnpm --filter @flowcommerce/web test:e2e
+
+      - name: Subir reporte de Playwright
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: |
+            web/playwright-report/
+            web/test-results/
+          retention-days: 7
+          if-no-files-found: ignore
