@@ -39,7 +39,7 @@ jobs:
     # El secreto se pasa SOLO a los pasos que lo usan (no a pnpm install,
     # cuyos scripts de postinstall podrían leerlo).
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Production solo se migra desde main, aunque alguien lo lance a mano.
       - name: Proteger production
