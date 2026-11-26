@@ -1,0 +1,124 @@
+@import 'tailwindcss';
+
+@import '@fontsource/poppins/500.css';
+@import '@fontsource/poppins/600.css';
+@import '@fontsource/poppins/700.css';
+@import '@fontsource/ibm-plex-sans/400.css';
+@import '@fontsource/ibm-plex-sans/500.css';
+@import '@fontsource/ibm-plex-sans/600.css';
+@import '@fontsource/ibm-plex-mono/400.css';
+@import '@fontsource/ibm-plex-mono/500.css';
+
+/*
+ * Tokens de marca (Manual de Marca FlowCommerce)
+ * Flow Blue #3B82F6 · Navy #0F172A · Teal Green #10B981 · Light Neutral #F3F6FA
+ */
+@theme {
+  --font-display: 'Poppins', system-ui, sans-serif;
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  --color-flow-50: #eff5ff;
+  --color-flow-100: #dbe8fe;
+  --color-flow-200: #bfd7fe;
+  --color-flow-300: #93bbfd;
+  --color-flow-400: #6099fa;
+  --color-flow-500: #3b82f6;
+  --color-flow-600: #2563eb;
+  --color-flow-700: #1d4ed8;
+
+  --color-navy-50: #f1f5f9;
+  --color-navy-100: #e2e8f0;
+  --color-navy-200: #cbd5e1;
+  --color-navy-300: #94a3b8;
+  --color-navy-400: #64748b;
+  --color-navy-500: #475569;
+  --color-navy-600: #334155;
+  --color-navy-700: #1e293b;
+  --color-navy-800: #172033;
+  --color-navy-900: #0f172a;
+
+  --color-teal-50: #ecfdf5;
+  --color-teal-100: #d1fae5;
+  --color-teal-500: #10b981;
+  --color-teal-600: #059669;
+  --color-teal-700: #047857;
+
+  --color-neutral-light: #f3f6fa;
+
+  --color-amber-brand: #f59e0b;
+  --color-orange-brand: #f97316;
+  --color-violet-brand: #8b5cf6;
+  --color-cyan-brand: #06b6d4;
+  --color-danger: #ef4444;
+
+  --shadow-card: 0 1px 2px rgb(15 23 42 / 0.04), 0 4px 16px rgb(15 23 42 / 0.04);
+  --shadow-pop: 0 12px 40px rgb(15 23 42 / 0.14);
+
+  --radius-card: 16px;
+}
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background: var(--color-neutral-light);
+    color: var(--color-navy-900);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.01em;
+  }
+
+  button {
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-flow-500);
+    outline-offset: 2px;
+  }
+}
+
+@layer utilities {
+  .scroll-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-navy-200) transparent;
+  }
+
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  .no-print,
+  aside,
+  header {
+    display: none !important;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  main {
+    overflow: visible !important;
+  }
+}

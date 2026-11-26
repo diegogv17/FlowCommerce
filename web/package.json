@@ -1,38 +1,40 @@
 {
   "name": "@flowcommerce/web",
-  "version": "0.1.0",
   "private": true,
+  "version": "0.1.0",
+  "type": "module",
   "scripts": {
-    "dev": "next dev --port 3001",
-    "build": "next build",
-    "start": "next start --port 3001",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "typecheck": "tsc -b",
+    "lint": "oxlint",
+    "preview": "vite preview"
   },
   "dependencies": {
-    "@ai-sdk/react": "^2.0.80",
-    "@flowcommerce/types": "workspace:*",
-    "@next/third-parties": "^16.0.1",
-    "@supabase/ssr": "^0.7.0",
+    "@dnd-kit/core": "^6.3.1",
+    "@dnd-kit/sortable": "^10.0.0",
+    "@dnd-kit/utilities": "^3.2.2",
+    "@fontsource/ibm-plex-mono": "^5.3.0",
+    "@fontsource/ibm-plex-sans": "^5.3.0",
+    "@fontsource/poppins": "^5.3.0",
     "@supabase/supabase-js": "^2.76.1",
-    "@tanstack/react-query": "^5.90.5",
-    "ai": "^5.0.80",
+    "@tanstack/react-query": "^5.108.2",
     "clsx": "^2.1.1",
-    "lucide-react": "^0.548.0",
-    "next": "^16.0.1",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "recharts": "^3.3.0",
-    "sonner": "^2.0.7",
-    "tailwind-merge": "^3.3.1"
+    "lucide-react": "^1.77.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "react-router-dom": "^7.18.6",
+    "recharts": "^3.11.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.1.16",
-    "@types/node": "^24.0.0",
-    "@types/react": "^19.2.2",
-    "@types/react-dom": "^19.2.2",
-    "tailwindcss": "^4.1.16",
-    "typescript": "^5.9.3",
-    "vitest": "^3.2.4"
+    "@tailwindcss/vite": "^4.3.5",
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "tailwindcss": "^4.3.5",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
   }
 }
