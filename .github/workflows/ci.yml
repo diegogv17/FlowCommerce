@@ -59,7 +59,7 @@ jobs:
 
       - name: Subir cobertura
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: cobertura-api
           path: coverage/
@@ -163,7 +163,7 @@ jobs:
 
       - name: Subir reporte de Playwright
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: |
