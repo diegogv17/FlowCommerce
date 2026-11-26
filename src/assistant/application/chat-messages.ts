@@ -10,18 +10,37 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 // Partes que el asistente entiende: texto, pasos y llamadas a herramientas que
 // el propio servidor generó en turnos anteriores. Archivos, razonamiento u
 // otras partes se descartan (el chat no admite adjuntos).
-// Las llamadas a herramientas solo se conservan si quedaron COMPLETAS: si el
-// usuario detuvo la respuesta a mitad de una, la llamada sin resultado haría
-// fallar al modelo en el siguiente turno.
+// Las llamadas a herramientas solo se conservan si quedaron CERRADAS: con
+// resultado, con error, denegadas o con la respuesta del usuario a una
+// solicitud de aprobación (needsApproval). Una llamada a medias (el usuario
+// detuvo la respuesta) haría fallar al modelo en el siguiente turno.
+const CLOSED_TOOL_STATES = new Set([
+  'output-available',
+  'output-error',
+  'output-denied',
+  'approval-responded',
+]);
+
 const isAllowedPart = (part: Record<string, unknown>): boolean => {
   const type = part.type;
   if (typeof type !== 'string') return false;
   if (type === 'text' || type === 'step-start') return true;
   return (
     type.startsWith('tool-') &&
-    (part.state === 'output-available' || part.state === 'output-error')
+    typeof part.state === 'string' &&
+    CLOSED_TOOL_STATES.has(part.state)
   );
 };
+
+// Un mensaje del asistente que trae la respuesta del usuario a una solicitud
+// de aprobación todavía sin procesar: el cliente lo reenvía (sin texto nuevo
+// del usuario) para que el servidor ejecute o descarte la herramienta y el
+// modelo continúe.
+export const hasApprovalResponse = (message: UIMessage): boolean =>
+  message.role === 'assistant' &&
+  message.parts.some(
+    (part) => 'state' in part && part.state === 'approval-responded',
+  );
 
 // Valida A MANO el body de useChat ({ id, messages, trigger, messageId… }).
 // No se usa un DTO de class-validator porque el ValidationPipe global tiene
@@ -82,9 +101,10 @@ export function parseChatMessages(body: unknown): UIMessage[] {
   while (recent.length > 0 && recent[0].role !== 'user') {
     recent.shift();
   }
-  if (recent.length === 0 || recent[recent.length - 1].role !== 'user') {
+  const last = recent[recent.length - 1];
+  if (!last || (last.role !== 'user' && !hasApprovalResponse(last))) {
     throw new BadRequestException(
-      'La conversación debe terminar con un mensaje del usuario',
+      'La conversación debe terminar con un mensaje del usuario o con su respuesta a una aprobación',
     );
   }
   return recent;

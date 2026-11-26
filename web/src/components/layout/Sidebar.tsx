@@ -8,6 +8,7 @@ import {
   PanelLeftOpen,
   Package,
   Settings,
+  Sparkles,
   Users,
   UserRound,
 } from 'lucide-react'
@@ -34,6 +35,7 @@ export function Sidebar({ collapsed, onToggle, onNavigate }: Props) {
     { to: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { to: '/leads', label: 'Leads', icon: Users, badge: leadTotal, tone: 'green' },
     { to: '/conversaciones', label: 'Conversaciones', icon: MessagesSquare, badge: unread || undefined, tone: 'green' },
+    { to: '/asistente', label: 'Asistente', icon: Sparkles },
     { to: '/cotizaciones', label: 'Cotizaciones', icon: FileText },
     { to: '/clientes', label: 'Clientes', icon: UserRound },
     { to: '/productos', label: 'Productos y Servicios', icon: Package },

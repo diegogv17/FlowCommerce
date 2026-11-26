@@ -10,6 +10,7 @@ import { ListClientsUseCase } from '../clients/application/use-cases/list-client
 import { GetDashboardUseCase } from '../dashboard/application/use-cases/get-dashboard.use-case';
 import { DASHBOARD_REPOSITORY } from '../dashboard/domain/repositories/dashboard.repository';
 import { DrizzleDashboardRepository } from '../dashboard/infrastructure/drizzle/drizzle-dashboard.repository';
+import { FollowUpsModule } from '../follow-ups/follow-ups.module';
 import { ListFollowUpsUseCase } from '../follow-ups/application/use-cases/follow-ups.use-cases';
 import { FOLLOW_UPS_REPOSITORY } from '../follow-ups/domain/repositories/follow-up.repository';
 import { DrizzleFollowUpRepository } from '../follow-ups/infrastructure/drizzle/drizzle-follow-up.repository';
@@ -51,6 +52,7 @@ import { AssistantController } from './presentation/assistant.controller';
     ProductsModule, // PRODUCTS_REPOSITORY
     QuotesModule, // QUOTES_REPOSITORY y CreateQuoteUseCase
     MessagesModule, // MESSAGES_REPOSITORY
+    FollowUpsModule, // CreateFollowUpUseCase (herramienta crear_seguimiento)
   ],
   controllers: [AssistantController],
   providers: [

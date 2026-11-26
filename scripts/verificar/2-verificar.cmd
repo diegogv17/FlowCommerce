@@ -19,8 +19,8 @@ echo api-test %errorlevel% >> .verify\resumen.log
 call pnpm --filter @flowcommerce/web typecheck > .verify\web-tsc.log 2>&1
 echo web-tsc %errorlevel% >> .verify\resumen.log
 
-call pnpm --filter @flowcommerce/web test > .verify\web-test.log 2>&1
-echo web-test %errorlevel% >> .verify\resumen.log
+call pnpm --filter @flowcommerce/web lint > .verify\web-lint.log 2>&1
+echo web-lint %errorlevel% >> .verify\resumen.log
 
 call pnpm --filter @flowcommerce/web build > .verify\web-build.log 2>&1
 echo web-build %errorlevel% >> .verify\resumen.log

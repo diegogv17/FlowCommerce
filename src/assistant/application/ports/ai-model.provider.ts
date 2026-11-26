@@ -37,5 +37,5 @@ export interface AiModelProvider {
   // false cuando falta GEMINI_API_KEY: las rutas responden 503.
   isConfigured(): boolean;
   generateStructured<T>(input: GenerateStructuredInput<T>): Promise<T>;
-  streamChat(input: StreamChatInput): AiChatStream;
+  streamChat(input: StreamChatInput): Promise<AiChatStream>;
 }
