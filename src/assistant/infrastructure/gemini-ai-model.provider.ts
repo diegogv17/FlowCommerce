@@ -30,6 +30,40 @@ import type {
 // Studio (responde error en cada llamada); GEMINI_MODEL lo puede sobrescribir.
 export const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
+// Nivel de razonamiento ("thinking") de los modelos Gemini 3. Si no se indica,
+// Gemini 3 razona en nivel alto: muy preciso pero lento (decenas de segundos
+// antes de la primera herramienta). Para un CRM basta "low".
+export const GEMINI_THINKING_LEVELS = [
+  'minimal',
+  'low',
+  'medium',
+  'high',
+] as const;
+export type GeminiThinkingLevel = (typeof GEMINI_THINKING_LEVELS)[number];
+export const DEFAULT_GEMINI_THINKING_LEVEL: GeminiThinkingLevel = 'low';
+
+type GeminiProviderOptions = {
+  google: { thinkingConfig: { thinkingLevel: GeminiThinkingLevel } };
+};
+
+/**
+ * Opciones del proveedor para Gemini. Solo los modelos Gemini 3 aceptan
+ * `thinkingLevel` (los 2.x responderían error), así que a los demás no se les
+ * manda nada. `GEMINI_THINKING_LEVEL=default` deja el nivel que elija Google.
+ */
+export function geminiProviderOptions(
+  modelId: string,
+  rawLevel: string | undefined,
+): GeminiProviderOptions | undefined {
+  if (!/^gemini-3/i.test(modelId.trim())) return undefined;
+  const level = rawLevel?.trim().toLowerCase() || DEFAULT_GEMINI_THINKING_LEVEL;
+  if (level === 'default') return undefined;
+  const thinkingLevel =
+    GEMINI_THINKING_LEVELS.find((option) => option === level) ??
+    DEFAULT_GEMINI_THINKING_LEVEL;
+  return { google: { thinkingConfig: { thinkingLevel } } };
+}
+
 // Adaptador de Google Gemini con el Vercel AI SDK (v6). La clave se lee una vez
 // al arrancar: sin GEMINI_API_KEY el adaptador queda "no configurado" y los
 // casos de uso responden 503 en lugar de tumbar la app. La clave nunca sale
@@ -42,12 +76,17 @@ export class GeminiAiModelProvider implements AiModelProvider {
   // firma cada solicitud y verifica la firma cuando el navegador la devuelve,
   // así un cliente no puede fabricar una aprobación que el modelo nunca pidió.
   private readonly toolApprovalSecret: string;
+  private readonly providerOptions: GeminiProviderOptions | undefined;
 
   constructor(config: ConfigService) {
     const apiKey = config.get<string>('GEMINI_API_KEY')?.trim();
     const modelId =
       config.get<string>('GEMINI_MODEL')?.trim() || DEFAULT_GEMINI_MODEL;
     this.model = apiKey ? createGoogleGenerativeAI({ apiKey })(modelId) : null;
+    this.providerOptions = geminiProviderOptions(
+      modelId,
+      config.get<string>('GEMINI_THINKING_LEVEL'),
+    );
 
     const secret = config.get<string>('AI_TOOL_APPROVAL_SECRET')?.trim();
     if (secret) {
@@ -87,6 +126,7 @@ export class GeminiAiModelProvider implements AiModelProvider {
         // Respuestas comerciales: algo de variedad, sin inventiva excesiva.
         temperature: 0.4,
         maxRetries: 1,
+        providerOptions: this.providerOptions,
       });
       return result.output;
     } catch (error) {
@@ -114,6 +154,7 @@ export class GeminiAiModelProvider implements AiModelProvider {
       abortSignal: input.abortSignal,
       temperature: 0.3,
       maxRetries: 1,
+      providerOptions: this.providerOptions,
       onError: ({ error }) => {
         this.logger.error(
           `Error en el chat del asistente: ${describeError(error)}`,
