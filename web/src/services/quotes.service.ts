@@ -57,6 +57,7 @@ interface ApiQuote {
   acceptedAt: string | null
   rejectedAt: string | null
   paidAt: string | null
+  paymentReference?: string | null
   creadoEn: string
   actualizadoEn: string
   items?: ApiQuoteItem[]
@@ -144,6 +145,7 @@ export function toQuote(q: ApiQuote): Quote {
     total: Number(q.total),
     conditions: q.terms ?? '',
     notes: q.notes ?? '',
+    paymentReference: q.paymentReference ?? null,
     aiGenerated: q.origin === 'AI',
     reviewRequired: q.status === 'DRAFT' || q.status === 'PENDING_APPROVAL',
   }
@@ -157,6 +159,12 @@ function endOfDayIso(date: string): string | null {
 }
 
 const orNull = (v: string | undefined) => (v && v.trim() ? v.trim() : null)
+
+export interface SimulatedPaymentInput {
+  brand: 'VISA' | 'MASTERCARD'
+  lastFourDigits: string
+  installments: number
+}
 
 export interface QuoteListParams {
   search?: string
@@ -271,6 +279,10 @@ export const quotesService = {
    */
   updateStatus: async (id: string, status: QuoteStatus | ApiQuoteStatus) =>
     toQuote(await http.patch<ApiQuote>(pp(`/quotes/${id}/status`), { status: toApiStatus(status) })),
+
+  /** POST /quotes/:id/simulated-payment: pago simulado (ACCEPTED → PAID). Solo viajan marca, últimos 4 dígitos y cuotas. */
+  simulatePayment: async (id: string, input: SimulatedPaymentInput) =>
+    toQuote(await http.post<ApiQuote>(pp(`/quotes/${id}/simulated-payment`), input)),
 
   /** Envía el PDF por correo (APPROVED → SENT, o reenvío si ya está SENT). Sin `to` usa el correo del cliente o del lead. */
   send: async (id: string, input: { to?: string; message?: string } = {}) =>

@@ -54,6 +54,7 @@ Todas están documentadas en [.env.example](.env.example).
 | `TRUST_PROXY` | Proxies delante de la API (`1` en la mayoría de hostings). Necesario para que el rate limiting vea la IP real |
 | `SWAGGER_ENABLED` | `/docs` está activo fuera de producción; en producción solo con `true` |
 | `THROTTLE_ENABLED`, `THROTTLE_<RUTA>_LIMIT`, `THROTTLE_<RUTA>_TTL_MS` | Límite de peticiones por IP en los endpoints públicos (`false` lo desactiva) |
+| `PAYMENT_SIMULATION_ENABLED` | Pago simulado con tarjeta (`POST .../quotes/:quoteId/simulated-payment`). Activo fuera de producción; en producción solo con `true`. No procesa cobros reales |
 | `SCHEDULER_ENABLED` | Recordatorios automáticos cada 10 minutos (`false` los apaga) |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | Id de la cuenta de WhatsApp Business (WABA). Necesario para listar las plantillas aprobadas |
 | `FILE_STORAGE_DRIVER` | Dónde se guardan los archivos. Hoy solo `local` (ver [Almacenamiento de archivos](#almacenamiento-de-archivos)) |
@@ -206,6 +207,7 @@ Ruta base: `/api/v1`. La referencia completa con esquemas de request y response 
 | PATCH | `/projects/:projectId/quotes/:quoteId` | `QUOTE_CREATE` (solo en `DRAFT`) |
 | DELETE | `/projects/:projectId/quotes/:quoteId` | `QUOTE_CREATE` (solo en `DRAFT`) |
 | PATCH | `/projects/:projectId/quotes/:quoteId/status` | `QUOTE_CREATE` (+ `QUOTE_APPROVE` para aprobar o marcar como pagada) |
+| POST | `/projects/:projectId/quotes/:quoteId/simulated-payment` | `QUOTE_CREATE` + `QUOTE_APPROVE` (solo `ACCEPTED`; body `brand`, `lastFourDigits`, `installments`; pasa a `PAID` con referencia `SIMULADO-...`) |
 | GET | `/projects/:projectId/quotes/:quoteId/pdf` | `QUOTE_READ` (`?download=true` para descargar) |
 | POST | `/projects/:projectId/quotes/:quoteId/send` | `QUOTE_CREATE` (correo con el PDF; `APPROVED` → `SENT`) |
 | POST | `/projects/:projectId/leads/:leadId/follow-ups` | `LEAD_UPDATE` |

@@ -22,6 +22,7 @@ import { CreateQuoteUseCase } from './application/use-cases/create-quote.use-cas
 import { DeleteQuoteUseCase } from './application/use-cases/delete-quote.use-case';
 import { GetQuoteUseCase } from './application/use-cases/get-quote.use-case';
 import { ListQuotesUseCase } from './application/use-cases/list-quotes.use-case';
+import { SimulateQuotePaymentUseCase } from './application/use-cases/simulate-quote-payment.use-case';
 import { UpdateQuoteStatusUseCase } from './application/use-cases/update-quote-status.use-case';
 import { UpdateQuoteUseCase } from './application/use-cases/update-quote.use-case';
 import { QUOTES_REPOSITORY } from './domain/repositories/quote.repository';
@@ -58,6 +59,7 @@ import { QuotesController } from './presentation/controllers/quotes.controller';
     UpdateQuoteUseCase,
     DeleteQuoteUseCase,
     UpdateQuoteStatusUseCase,
+    SimulateQuotePaymentUseCase,
     QuoteDocumentBuilder,
     { provide: QUOTE_PDF_RENDERER, useClass: PdfkitQuotePdfRenderer },
     GetQuotePdfUseCase,
