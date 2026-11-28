@@ -23,6 +23,15 @@ import { DeleteQuoteUseCase } from './application/use-cases/delete-quote.use-cas
 import { GetQuoteUseCase } from './application/use-cases/get-quote.use-case';
 import { ListQuotesUseCase } from './application/use-cases/list-quotes.use-case';
 import { SimulateQuotePaymentUseCase } from './application/use-cases/simulate-quote-payment.use-case';
+import { RECURRENTE_GATEWAY } from './application/ports/recurrente.gateway';
+import { ConfirmRecurrentePaymentUseCase } from './application/use-cases/confirm-recurrente-payment.use-case';
+import { CreateRecurrenteCheckoutUseCase } from './application/use-cases/create-recurrente-checkout.use-case';
+import { GetRecurrenteCheckoutUseCase } from './application/use-cases/get-recurrente-checkout.use-case';
+import { GetRecurrenteAvailabilityUseCase } from './application/use-cases/recurrente-availability.use-case';
+import { RECURRENTE_CHECKOUT_REPOSITORY } from './domain/recurrente-checkout';
+import { DrizzleRecurrenteCheckoutRepository } from './infrastructure/drizzle/drizzle-recurrente-checkout.repository';
+import { RecurrenteHttpGateway } from './infrastructure/recurrente/recurrente-http.gateway';
+import { RecurrenteController } from './presentation/controllers/recurrente.controller';
 import { UpdateQuoteStatusUseCase } from './application/use-cases/update-quote-status.use-case';
 import { UpdateQuoteUseCase } from './application/use-cases/update-quote.use-case';
 import { QUOTES_REPOSITORY } from './domain/repositories/quote.repository';
@@ -44,12 +53,24 @@ import { QuotesController } from './presentation/controllers/quotes.controller';
     UsersModule,
     ActivityModule,
   ],
-  controllers: [QuotesController],
+  controllers: [QuotesController, RecurrenteController],
   providers: [
     {
       provide: QUOTES_REPOSITORY,
       useClass: DrizzleQuoteRepository,
     },
+    {
+      provide: RECURRENTE_CHECKOUT_REPOSITORY,
+      useClass: DrizzleRecurrenteCheckoutRepository,
+    },
+    {
+      provide: RECURRENTE_GATEWAY,
+      useClass: RecurrenteHttpGateway,
+    },
+    GetRecurrenteAvailabilityUseCase,
+    GetRecurrenteCheckoutUseCase,
+    CreateRecurrenteCheckoutUseCase,
+    ConfirmRecurrentePaymentUseCase,
     QuoteSettingsReader,
     QuoteLifecycleEvents,
     QuoteItemsBuilder,

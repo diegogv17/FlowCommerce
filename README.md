@@ -55,6 +55,7 @@ Todas están documentadas en [.env.example](.env.example).
 | `SWAGGER_ENABLED` | `/docs` está activo fuera de producción; en producción solo con `true` |
 | `THROTTLE_ENABLED`, `THROTTLE_<RUTA>_LIMIT`, `THROTTLE_<RUTA>_TTL_MS` | Límite de peticiones por IP en los endpoints públicos (`false` lo desactiva) |
 | `PAYMENT_SIMULATION_ENABLED` | Pago simulado con tarjeta (`POST .../quotes/:quoteId/simulated-payment`). Activo fuera de producción; en producción solo con `true`. No procesa cobros reales |
+| `RECURRENTE_SECRET_KEY` | Llave secreta TEST de Recurrente Sandbox (`X-SECRET-KEY`). Solo backend. Sin llave, con llave inválida o de producción, el checkout de prueba queda bloqueado |
 | `SCHEDULER_ENABLED` | Recordatorios automáticos cada 10 minutos (`false` los apaga) |
 | `WHATSAPP_BUSINESS_ACCOUNT_ID` | Id de la cuenta de WhatsApp Business (WABA). Necesario para listar las plantillas aprobadas |
 | `FILE_STORAGE_DRIVER` | Dónde se guardan los archivos. Hoy solo `local` (ver [Almacenamiento de archivos](#almacenamiento-de-archivos)) |
@@ -208,6 +209,10 @@ Ruta base: `/api/v1`. La referencia completa con esquemas de request y response 
 | DELETE | `/projects/:projectId/quotes/:quoteId` | `QUOTE_CREATE` (solo en `DRAFT`) |
 | PATCH | `/projects/:projectId/quotes/:quoteId/status` | `QUOTE_CREATE` (+ `QUOTE_APPROVE` para aprobar o marcar como pagada) |
 | POST | `/projects/:projectId/quotes/:quoteId/simulated-payment` | `QUOTE_CREATE` + `QUOTE_APPROVE` (solo `ACCEPTED`; body `brand`, `lastFourDigits`, `installments`; pasa a `PAID` con referencia `SIMULADO-...`) |
+| GET | `/projects/:projectId/recurrente-sandbox/availability` | `QUOTE_READ` (consulta `GET /api/test` de Recurrente y exige `environment: sandbox`) |
+| GET | `/projects/:projectId/quotes/:quoteId/recurrente/checkout` | `QUOTE_READ` (checkout guardado; no llama a Recurrente) |
+| POST | `/projects/:projectId/quotes/:quoteId/recurrente/checkout` | `QUOTE_CREATE` + `QUOTE_APPROVE` (solo `ACCEPTED`; crea o devuelve el checkout vigente en GTQ) |
+| POST | `/projects/:projectId/quotes/:quoteId/recurrente/verify` | `QUOTE_CREATE` + `QUOTE_APPROVE` (consulta `GET /api/checkouts/{id}`; solo `paid` con monto y moneda coincidentes pasa a `PAID`) |
 | GET | `/projects/:projectId/quotes/:quoteId/pdf` | `QUOTE_READ` (`?download=true` para descargar) |
 | POST | `/projects/:projectId/quotes/:quoteId/send` | `QUOTE_CREATE` (correo con el PDF; `APPROVED` → `SENT`) |
 | POST | `/projects/:projectId/leads/:leadId/follow-ups` | `LEAD_UPDATE` |
@@ -271,6 +276,25 @@ Para agregar una opción: crear la clase (p. ej. `S3FileStorage implements FileS
 2. Pagos confirma con `POST /api/v1/integrations/payments/webhook` y la cabecera `X-FlowCommerce-Signature: t=<unix>,v1=<hex>`, donde `v1 = HMAC-SHA256(PAYMENTS_WEBHOOK_SECRET, "<t>.<cuerpo crudo>")`. Las firmas de más de 5 minutos se rechazan.
 3. Cuerpo del evento: `eventId` (único; un repetido responde `DUPLICATE`), `type` (`payment.succeeded`, `payment.failed`, `payment_link.created`), `projectId`, `quoteId`, `amount`, `currency`, `reference` y `paymentLinkUrl`.
 4. `payment.succeeded` pasa la cotización `ACCEPTED` → `PAID` solo si el importe coincide con el total (409 si no). `payment.failed` se registra sin cambiar nada.
+
+## Recurrente Sandbox (checkout de prueba)
+
+Cobro de una cotización `ACCEPTED` con la página de pago de Recurrente en modo de pruebas. Convive con el pago simulado (`PAYMENT_SIMULATION_ENABLED`), el botón «Marcar como pagada» y el flujo externo de Pagos, que no cambian.
+
+**Configuración.**
+
+1. En Recurrente, en modo de pruebas, copiar la llave secreta TEST.
+2. Pegarla en `RECURRENTE_SECRET_KEY` del `.env` del backend (no en `web/.env`) y reiniciar la API. `APP_URL` define a dónde regresa el cliente tras pagar (por defecto `http://localhost:5173`).
+3. El backend llama a `https://app.recurrente.com/api` con el encabezado `X-SECRET-KEY`. Antes de crear un checkout consulta `GET /api/test` y solo continúa si responde `environment: sandbox`; si la llave falta, es inválida o es de producción, el botón muestra el motivo y el resto del CRM sigue igual.
+
+**Flujo.**
+
+1. Un OWNER o ADMIN abre una cotización `ACCEPTED` y pulsa «Cobrar con Recurrente (prueba)». El backend crea el checkout en GTQ con el total guardado en centavos enteros (`POST /api/checkouts`, con `Idempotency-Key` por cotización e intento) y guarda su id, importe y moneda en `quote_recurrente_checkouts`. Un índice único parcial garantiza un solo checkout vigente por cotización, así que los clics repetidos o simultáneos devuelven el mismo enlace.
+2. El asesor abre o copia el enlace. El cliente escribe los datos de prueba en la página de Recurrente (éxito: `4242 4242 4242 4242`; rechazo: `4000 0000 0000 0002`; vencimiento futuro y CVC de 3 dígitos).
+3. El asesor pulsa «Consultar estado». El backend pide `GET /api/checkouts/{id}` y solo con `status: paid`, mismo id, `total_in_cents` y `currency` que el registro, y `live_mode` distinto de `true`, aplica la transición atómica `ACCEPTED` → `PAID` con `payment_reference = RECURRENTE-<id del checkout>`, el historial y las notificaciones habituales. Abrir el enlace o volver a FlowCommerce no confirma nada.
+4. Si el checkout sigue `unpaid` (incluye un intento rechazado) o `payment_in_progress`, la cotización se queda en `ACCEPTED`. Si vence (`expired`), se puede generar un enlace nuevo. Confirmar otra vez no duplica el pago ni la transición.
+
+**Producción (no activado).** El adaptador rechaza llaves que no sean Sandbox y los checkouts con `live_mode: true`. Activarlo en producción requeriría: la llave LIVE y su validación, decidir si se permite `environment: live`, un webhook firmado de Recurrente en lugar de la consulta manual, `success_url`/`cancel_url` públicos, y revisar mínimos, comisiones y facturación en la cuenta real.
 
 ## Reglas de negocio
 

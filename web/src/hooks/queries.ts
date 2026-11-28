@@ -31,6 +31,8 @@ export const qk = {
   products: (p?: object) => ['products', p ?? {}] as const,
   quotes: (p?: object) => ['quotes', p ?? {}] as const,
   quote: (id: string) => ['quote', id] as const,
+  recurrenteAvailability: ['recurrente-availability'] as const,
+  recurrenteCheckout: (id: string) => ['recurrente-checkout', id] as const,
   notes: (p?: object) => ['notes', p ?? {}] as const,
   notifications: (kind?: string) => ['notifications', kind ?? ''] as const,
   quoteSummary: ['quote-summary'] as const,
@@ -263,6 +265,30 @@ export function useSimulateQuotePayment() {
     onSuccess: (q) => {
       qc.setQueryData(qk.quote(q.id), q)
       invalidateQuotes(qc)
+    },
+  })
+}
+export function useRecurrenteAvailability() {
+  return useQuery({ queryKey: qk.recurrenteAvailability, queryFn: quotesService.recurrenteAvailability, staleTime: 30_000, retry: false })
+}
+export function useRecurrenteCheckout(quoteId: string) {
+  return useQuery({ queryKey: qk.recurrenteCheckout(quoteId), queryFn: () => quotesService.recurrenteCheckout(quoteId) })
+}
+export function useCreateRecurrenteCheckout(quoteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => quotesService.createRecurrenteCheckout(quoteId),
+    onSuccess: (checkout) => qc.setQueryData(qk.recurrenteCheckout(quoteId), checkout),
+  })
+}
+export function useVerifyRecurrentePayment(quoteId: string) {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => quotesService.verifyRecurrentePayment(quoteId),
+    onSuccess: (result) => {
+      qc.setQueryData(qk.recurrenteCheckout(quoteId), result.checkout)
+      qc.setQueryData(qk.quote(quoteId), result.quote)
+      if (result.outcome === 'PAID') invalidateQuotes(qc)
     },
   })
 }

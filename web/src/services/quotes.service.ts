@@ -166,6 +166,30 @@ export interface SimulatedPaymentInput {
   installments: number
 }
 
+export interface RecurrenteAvailability {
+  available: boolean
+  reason: 'MISSING_KEY' | 'INVALID_KEY' | 'NOT_SANDBOX' | 'UNREACHABLE' | null
+  message: string | null
+}
+
+export interface RecurrenteCheckout {
+  checkoutId: string
+  checkoutUrl: string
+  amountInCents: number
+  currency: string
+  status: 'PENDING' | 'PAID' | 'EXPIRED'
+  paidAt: string | null
+  createdAt: string
+}
+
+export interface RecurrenteVerification {
+  outcome: 'PAID' | 'PENDING' | 'IN_PROGRESS' | 'EXPIRED'
+  message: string
+  transitioned: boolean
+  checkout: RecurrenteCheckout
+  quote: Quote
+}
+
 export interface QuoteListParams {
   search?: string
   /** Estado de la UI (borrador…) o de la API (DRAFT…) */
@@ -283,6 +307,18 @@ export const quotesService = {
   /** POST /quotes/:id/simulated-payment: pago simulado (ACCEPTED → PAID). Solo viajan marca, últimos 4 dígitos y cuotas. */
   simulatePayment: async (id: string, input: SimulatedPaymentInput) =>
     toQuote(await http.post<ApiQuote>(pp(`/quotes/${id}/simulated-payment`), input)),
+
+  recurrenteAvailability: () => http.get<RecurrenteAvailability>(pp('/recurrente-sandbox/availability')),
+
+  recurrenteCheckout: async (id: string) =>
+    (await http.get<{ checkout: RecurrenteCheckout | null }>(pp(`/quotes/${id}/recurrente/checkout`))).checkout,
+
+  createRecurrenteCheckout: (id: string) => http.post<RecurrenteCheckout>(pp(`/quotes/${id}/recurrente/checkout`)),
+
+  verifyRecurrentePayment: async (id: string): Promise<RecurrenteVerification> => {
+    const result = await http.post<Omit<RecurrenteVerification, 'quote'> & { quote: ApiQuote }>(pp(`/quotes/${id}/recurrente/verify`))
+    return { ...result, quote: toQuote(result.quote) }
+  },
 
   /** Envía el PDF por correo (APPROVED → SENT, o reenvío si ya está SENT). Sin `to` usa el correo del cliente o del lead. */
   send: async (id: string, input: { to?: string; message?: string } = {}) =>
