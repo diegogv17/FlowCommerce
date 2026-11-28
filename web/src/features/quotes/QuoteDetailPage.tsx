@@ -8,8 +8,10 @@ import { useToast } from '@/app/toast'
 import { useDeleteQuote, useQuote, useSendQuote, useUpdateQuoteStatus } from '@/hooks/queries'
 import { quotesService } from '@/services/quotes.service'
 import { errorMessage } from '@/services/http'
+import { describePaymentReference } from '@/lib/card-payment'
 import { decimal, formatDate, moneyExact } from '@/lib/format'
 import type { ApiQuoteStatus } from '@/types/domain'
+import { QuotePaymentModal } from './QuotePaymentModal'
 import { quoteBadge } from './status'
 
 const label = 'text-[10px] font-semibold tracking-[0.12em] text-navy-300 uppercase'
@@ -28,6 +30,7 @@ export function QuoteDetailPage() {
   const [to, setTo] = useState('')
   const [message, setMessage] = useState('')
   const [downloading, setDownloading] = useState(false)
+  const [payOpen, setPayOpen] = useState(false)
 
   if (isError) return <Card><ErrorState onRetry={() => refetch()} /></Card>
   if (isLoading || !q) return <PageLoader />
@@ -78,6 +81,7 @@ export function QuoteDetailPage() {
     ['Vence', formatDate(q.validUntil), true],
     ['Total', moneyExact(q.total), true],
     ['Responsable', q.advisorName],
+    ...(api === 'PAID' && q.paymentReference ? [['Pago', describePaymentReference(q.paymentReference)] as [string, string]] : []),
   ]
 
   /* Acciones según el estado real de la API (ver quote-transitions.ts del backend). */
@@ -102,6 +106,9 @@ export function QuoteDetailPage() {
     }
     if (api === 'ACCEPTED') {
       actions.push(
+        <span key="card" title={canApprove ? undefined : APPROVER_HINT} className="block">
+          <Button className="w-full" icon={<CreditCard className="size-4" />} disabled={!canApprove} onClick={() => setPayOpen(true)}>Cobrar con tarjeta</Button>
+        </span>,
         <span key="paid" title={canApprove ? undefined : APPROVER_HINT} className="block">
           <Button variant="success" className="w-full" icon={<CreditCard className="size-4" />} loading={busy} disabled={!canApprove} onClick={() => change('PAID', 'Cotización marcada como pagada')}>Marcar como pagada</Button>
         </span>,
@@ -210,6 +217,8 @@ export function QuoteDetailPage() {
           </Card>
         </aside>
       </div>
+
+      {payOpen && <QuotePaymentModal quote={{ id: q.id, folio: q.folio, total: q.total }} onClose={() => setPayOpen(false)} />}
 
       <Modal open={sendOpen} onClose={() => setSendOpen(false)} title={api === 'SENT' ? 'Reenviar cotización' : 'Enviar cotización por correo'} footer={<><Button variant="ghost" onClick={() => setSendOpen(false)}>Cancelar</Button><Button type="submit" form="send-quote" loading={send.isPending} icon={<Send className="size-4" />}>Enviar</Button></>}>
         <form id="send-quote" onSubmit={submitSend} className="space-y-4">

@@ -38,6 +38,7 @@ import { CreateQuoteUseCase } from '../../application/use-cases/create-quote.use
 import { DeleteQuoteUseCase } from '../../application/use-cases/delete-quote.use-case';
 import { GetQuoteUseCase } from '../../application/use-cases/get-quote.use-case';
 import { ListQuotesUseCase } from '../../application/use-cases/list-quotes.use-case';
+import { SimulateQuotePaymentUseCase } from '../../application/use-cases/simulate-quote-payment.use-case';
 import { UpdateQuoteStatusUseCase } from '../../application/use-cases/update-quote-status.use-case';
 import { UpdateQuoteUseCase } from '../../application/use-cases/update-quote.use-case';
 import {
@@ -49,6 +50,7 @@ import { CreateQuoteDto } from '../dto/create-quote.dto';
 import { ListQuotesQueryDto } from '../dto/list-quotes-query.dto';
 import { PaginatedQuotesDto } from '../dto/paginated-quotes.dto';
 import { QuoteDetailDto } from '../dto/quote.dto';
+import { SimulateQuotePaymentDto } from '../dto/simulate-quote-payment.dto';
 import { UpdateQuoteStatusDto } from '../dto/update-quote-status.dto';
 import { UpdateQuoteDto } from '../dto/update-quote.dto';
 
@@ -75,6 +77,7 @@ export class QuotesController {
     private readonly updateQuoteStatusUseCase: UpdateQuoteStatusUseCase,
     private readonly getQuotePdfUseCase: GetQuotePdfUseCase,
     private readonly sendQuoteUseCase: SendQuoteUseCase,
+    private readonly simulateQuotePaymentUseCase: SimulateQuotePaymentUseCase,
   ) {}
 
   @Post()
@@ -245,6 +248,40 @@ export class QuotesController {
         projectId,
         quoteId,
         status: dto.status,
+      })
+      .then((quote) => quote.toDetail());
+  }
+
+  @Post(':quoteId/simulated-payment')
+  @HttpCode(HttpStatus.OK)
+  @RequirePermission(Permission.QUOTE_CREATE)
+  @ApiOperation({
+    summary: 'Registrar un pago simulado con tarjeta',
+    description:
+      'Solo ACCEPTED. No procesa ningún cobro real: recibe marca, últimos 4 dígitos y cuotas, y pasa la cotización a PAID con una referencia SIMULADO. Exige QUOTE_APPROVE y puede desactivarse con PAYMENT_SIMULATION_ENABLED=false.',
+  })
+  @ApiOkResponse({ type: QuoteDetailDto })
+  @ApiBadRequestResponse({
+    description: 'Body inválido o cuotas con una tarjeta que no es Visa',
+  })
+  @ApiNotFoundResponse({ description: 'No existe en este proyecto' })
+  @ApiConflictResponse({
+    description: 'La cotización no está en ACCEPTED o su estado cambió',
+  })
+  simulatePayment(
+    @CurrentUserId() userId: string,
+    @Param('projectId', ParseUUIDPipe) projectId: string,
+    @Param('quoteId', ParseUUIDPipe) quoteId: string,
+    @Body() dto: SimulateQuotePaymentDto,
+  ): Promise<QuoteDetailDto> {
+    return this.simulateQuotePaymentUseCase
+      .execute({
+        actorUserId: userId,
+        projectId,
+        quoteId,
+        brand: dto.brand,
+        lastFourDigits: dto.lastFourDigits,
+        installments: dto.installments,
       })
       .then((quote) => quote.toDetail());
   }

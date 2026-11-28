@@ -12,6 +12,7 @@ import {
   quotesService,
 } from '@/services'
 import { projectService } from '@/services/project.service'
+import type { SimulatedPaymentInput } from '@/services/quotes.service'
 import { searchService } from '@/services/search.service'
 import type { AiSettings, LeadFilters, LeadStatus, NotificationKind, Paginated, Lead, QuoteStatus, ApiQuoteStatus } from '@/types/domain'
 
@@ -249,6 +250,16 @@ export function useUpdateQuoteStatus() {
   const qc = useQueryClient()
   return useMutation({
     mutationFn: ({ id, status }: { id: string; status: QuoteStatus | ApiQuoteStatus }) => quotesService.updateStatus(id, status),
+    onSuccess: (q) => {
+      qc.setQueryData(qk.quote(q.id), q)
+      invalidateQuotes(qc)
+    },
+  })
+}
+export function useSimulateQuotePayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: ({ id, ...input }: { id: string } & SimulatedPaymentInput) => quotesService.simulatePayment(id, input),
     onSuccess: (q) => {
       qc.setQueryData(qk.quote(q.id), q)
       invalidateQuotes(qc)

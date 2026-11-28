@@ -292,6 +292,8 @@ export interface Quote {
   aiGenerated: boolean
   /** true mientras la cotización no haya sido aprobada internamente (DRAFT o PENDING_APPROVAL) */
   reviewRequired: boolean
+  /** Referencia del pago (SIMULADO-VISA-4242-3C cuando fue un pago simulado) */
+  paymentReference?: string | null
   /** Estado real en la API */
   apiStatus?: ApiQuoteStatus
   leadId?: ID
