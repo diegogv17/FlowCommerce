@@ -204,6 +204,13 @@
       "when": 1792782655598,
       "tag": "0028_drop_better_auth_tables",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1795835160796,
+      "tag": "0029_quote_recurrente_checkouts",
+      "breakpoints": true
     }
   ]
 }

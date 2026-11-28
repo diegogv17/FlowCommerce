@@ -1139,6 +1139,55 @@ export const paymentEvents = pgTable(
   ],
 );
 
+export const quoteRecurrenteCheckouts = pgTable(
+  'quote_recurrente_checkouts',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    projectId: uuid('project_id')
+      .notNull()
+      .references(() => projects.id, { onDelete: 'cascade' }),
+    quoteId: uuid('quote_id').notNull(),
+    attempt: integer('attempt').notNull(),
+    checkoutId: varchar('checkout_id', { length: 255 }).notNull(),
+    checkoutUrl: text('checkout_url').notNull(),
+    amountInCents: integer('amount_in_cents').notNull(),
+    currency: varchar('currency', { length: 3 }).notNull(),
+    status: varchar('status', { length: 20 }).notNull().default('PENDING'),
+    paidAt: timestamp('paid_at', { withTimezone: true, mode: 'date' }),
+    createdAt: timestamp('creado_en', { withTimezone: true, mode: 'date' })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('actualizado_en', {
+      withTimezone: true,
+      mode: 'date',
+    })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex('quote_recurrente_checkouts_checkout_id_unique').on(
+      table.checkoutId,
+    ),
+    uniqueIndex('quote_recurrente_checkouts_quote_attempt_unique').on(
+      table.quoteId,
+      table.attempt,
+    ),
+    uniqueIndex('quote_recurrente_checkouts_active_quote_unique')
+      .on(table.quoteId)
+      .where(sql`status <> 'EXPIRED'`),
+    index('quote_recurrente_checkouts_project_id_quote_id_idx').on(
+      table.projectId,
+      table.quoteId,
+    ),
+    foreignKey({
+      columns: [table.quoteId, table.projectId],
+      foreignColumns: [quotes.id, quotes.projectId],
+      name: 'quote_recurrente_checkouts_quote_id_project_id_quotes_fk',
+    }).onDelete('cascade'),
+  ],
+);
+
 // Credenciales de WhatsApp Cloud API de un proyecto (una cuenta por proyecto).
 // El token se guarda CIFRADO (AES-256-GCM con ENCRYPTION_KEY) y nunca se
 // devuelve por HTTP. Si un proyecto no tiene fila, se usan las variables
@@ -1443,6 +1492,8 @@ export type ActivityEventRow = typeof activityEvents.$inferSelect;
 export type AttachmentRow = typeof attachments.$inferSelect;
 export type ApiKeyRow = typeof apiKeys.$inferSelect;
 export type PaymentEventRow = typeof paymentEvents.$inferSelect;
+export type QuoteRecurrenteCheckoutRow =
+  typeof quoteRecurrenteCheckouts.$inferSelect;
 export type WhatsAppAccountRow = typeof whatsappAccounts.$inferSelect;
 export type QuickReplyRow = typeof quickReplies.$inferSelect;
 export type LeadViewRow = typeof leadViews.$inferSelect;

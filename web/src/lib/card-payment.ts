@@ -98,6 +98,8 @@ export function installmentLabel(total: number, count: number): string {
 }
 
 export function describePaymentReference(reference: string): string {
+  const recurrente = /^RECURRENTE-(.+)$/.exec(reference)
+  if (recurrente) return `Recurrente Sandbox · checkout ${recurrente[1]} (prueba)`
   const match = /^SIMULADO-(VISA|MASTERCARD)-(\d{4})-(\d+)C$/.exec(reference)
   if (!match) return reference
   const brand = match[1] === 'VISA' ? 'Visa' : 'Mastercard'

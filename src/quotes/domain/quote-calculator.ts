@@ -53,7 +53,8 @@ export class AdjustmentExceedsBaseError extends Error {
   }
 }
 
-const toHundredths = (value: number): bigint => BigInt(Math.round(value * 100));
+export const toHundredths = (value: number): bigint =>
+  BigInt(Math.round(value * 100));
 const fromCents = (cents: bigint): number => Number(cents) / 100;
 
 // Cociente entero redondeado half-up (operandos no negativos).
